@@ -69,10 +69,10 @@ def create_pyproject_toml(
         version = "0.1.0"
         description = "LangCore provider plugin for {provider_name}"
         readme = "README.md"
-        requires-python = ">=3.10"
+        requires-python = ">=3.13"
         license = {{text = "Apache-2.0"}}
         dependencies = [
-            "langcore>=1.0.0",
+            "langcore",
             # Add your provider's SDK dependencies here
         ]
 

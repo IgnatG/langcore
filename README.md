@@ -2,9 +2,9 @@
 
 ## Overview
 
-**LangCore** is a Python library for LLM-powered structured information extraction from unstructured text. It is built on top of Google's open-source [LangCore](https://github.com/google/langcore) library (Apache 2.0), extending it with additional capabilities for production  document processing workflows.
+**LangCore** is a Python library for LLM-powered structured information extraction from unstructured text. It is built on top of Google's open-source [LangCore](https://github.com/ignatg/langcore) library (Apache 2.0), extending it with additional capabilities for production  document processing workflows.
 
-> **Attribution:** The core extraction engine is derived from [LangCore by Google LLC](https://github.com/google/langcore). See the [NOTICE](NOTICE) file for full attribution details.
+> **Attribution:** The core extraction engine is derived from [LangCore by Google LLC](https://github.com/ignatg/langcore). See the [NOTICE](NOTICE) file for full attribution details.
 
 ## Table of Contents
 
@@ -40,7 +40,7 @@ LangCore extends Google's LangCore with the following features:
 | **Quality Metrics & Evaluation** | Built-in P/R/F1/accuracy metrics with per-field and per-document breakdown |
 | **Multi-pass Confidence** | Cross-pass frequency augmentation for higher-confidence extractions |
 | **Prompt Alignment Validation** | Warnings when few-shot examples contain non-verbatim text |
-| **Plugin Ecosystem** | First-party plugins: `langcore-rag`, `langcore-guardrails`, `langcore-dspy`, `langcore-litellm`, `langcore-audit` |
+| **Plugin Ecosystem** | 8 first-party plugins: LiteLLM, audit, guardrails, hybrid, DSPy, RAG, Docling, and API — see [Ecosystem Plugins](#ecosystem-plugins) |
 
 ## Core Capabilities
 
@@ -646,15 +646,18 @@ Explore RadExtract, a live interactive demo on HuggingFace Spaces that shows how
 
 ## Ecosystem Plugins
 
-LangCore has a growing plugin ecosystem:
+LangCore has a growing ecosystem of first-party plugins:
 
-| Plugin | Description |
-|---|---|
-| [`langcore-rag`](../langcore-rag/) | RAG query parsing — converts natural language queries into semantic terms + structured filters |
-| [`langcore-litellm`](../langcore-litellm/) | LiteLLM provider for 100+ LLM backends (OpenAI, Azure, Anthropic, etc.) |
-| [`langcore-guardrails`](../langcore-guardrails/) | Validation + retry loop with Pydantic, JSON Schema, confidence threshold, and consistency validators |
-| [`langcore-dspy`](../langcore-dspy/) | DSPy prompt optimization (MIPROv2, GEPA) with evaluation and persist/load support |
-| [`langcore-audit`](../langcore-audit/) | Audit and compliance tooling for extraction pipelines |
+| Plugin | PyPI | Description |
+|---|---|---|
+| [langcore-litellm](../langcore-litellm/) | [![PyPI](https://img.shields.io/pypi/v/langcore-litellm)](https://pypi.org/project/langcore-litellm/) | Provider plugin for 100+ LLM backends via LiteLLM (OpenAI, Gemini, Anthropic, Azure, Ollama, etc.) |
+| [langcore-audit](../langcore-audit/) | [![PyPI](https://img.shields.io/pypi/v/langcore-audit)](https://pypi.org/project/langcore-audit/) | Provider plugin for structured audit logging with pluggable sinks (logging, JSONL, OpenTelemetry) |
+| [langcore-guardrails](../langcore-guardrails/) | [![PyPI](https://img.shields.io/pypi/v/langcore-guardrails)](https://pypi.org/project/langcore-guardrails/) | Provider plugin for output validation and automatic retry with corrective prompts |
+| [langcore-hybrid](../langcore-hybrid/) | [![PyPI](https://img.shields.io/pypi/v/langcore-hybrid-llm-regex)](https://pypi.org/project/langcore-hybrid-llm-regex/) | Provider plugin for deterministic rule-based extraction with LLM fallback |
+| [langcore-dspy](../langcore-dspy/) | [![PyPI](https://img.shields.io/pypi/v/langcore-dspy)](https://pypi.org/project/langcore-dspy/) | Plugin for automatic prompt optimization using DSPy (MIPROv2, GEPA) |
+| [langcore-rag](../langcore-rag/) | [![PyPI](https://img.shields.io/pypi/v/langcore-rag)](https://pypi.org/project/langcore-rag/) | Plugin for RAG query parsing — decomposes queries into semantic terms and structured filters |
+| [langcore-docling](../langcore-docling/) | [![PyPI](https://img.shields.io/pypi/v/langcore-docling)](https://pypi.org/project/langcore-docling/) | Plugin for native PDF support via Docling — drop-in replacement for `lx.extract()` |
+| [langcore-api](../langcore-api/) | [![PyPI](https://img.shields.io/pypi/v/langcore-api)](https://pypi.org/project/langcore-api/) | Production-ready HTTP service wrapping the full LangCore ecosystem (FastAPI + Celery + Redis) |
 
 For detailed instructions on creating a provider plugin, see the [Custom Provider Plugin Example](examples/custom_provider_plugin/).
 
@@ -720,7 +723,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full development guidelines.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full terms.
 
-This project includes code originally developed by Google LLC as [LangCore](https://github.com/google/langcore). See [NOTICE](NOTICE) for attribution details.
+This project includes code originally developed by Google LLC as [LangCore](https://github.com/ignatg/langcore). See [NOTICE](NOTICE) for attribution details.
 
 ---
 

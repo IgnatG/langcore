@@ -3,6 +3,7 @@
 This directory contains the provider system for LangCore, which enables support for different Large Language Model (LLM) backends.
 
 **Quick Start**: Use the [provider plugin generator script](../../scripts/create_provider_plugin.py) to create a new provider in minutes:
+
 ```bash
 python scripts/create_provider_plugin.py MyProvider --with-schema
 ```
@@ -72,25 +73,32 @@ model = lx.factory.create_model(config)
 ```
 
 Provider names can be:
+
 - Full class name: `"GeminiLanguageModel"`, `"OpenAILanguageModel"`, `"OllamaLanguageModel"`
 - Partial match: `"gemini"`, `"openai"`, `"ollama"` (case-insensitive)
 
 ## Provider Types
 
 ### 1. Core Providers (Always Available)
+
 Ships with langcore, dependencies included:
+
 - **Gemini** (`gemini.py`): Google's Gemini models
 - **Ollama** (`ollama.py`): Local models via Ollama
 
 ### 2. Built-in Provider with Optional Dependencies
+
 Ships with langcore, but requires extra installation:
+
 - **OpenAI** (`openai.py`): OpenAI's GPT models
   - Code included in package
   - Requires: `pip install langcore[openai]` to install OpenAI SDK
   - Future: May be moved to external plugin package
 
 ### 3. External Plugins (Third-party)
+
 Separate packages that extend LangCore with new providers:
+
 - **Installed separately**: `pip install langcore-yourprovider`
 - **Auto-discovered**: Uses Python entry points for automatic registration
 - **Zero configuration**: Import langcore and the provider is available
@@ -128,6 +136,7 @@ result = lx.extract(
 ```
 
 **Important Notes:**
+
 - Plugin loading is **lazy** - plugins are discovered when first needed
 - To manually trigger plugin loading: `lx.providers.load_plugins_once()`
 - Set `LANGCORE_DISABLE_PLUGINS=1` to disable plugin loading
@@ -167,6 +176,7 @@ class GeminiLanguageModel(lx.inference.BaseLanguageModel):
 ## Usage Examples
 
 ### Using Default Provider Selection
+
 ```python
 import langcore as lx
 
@@ -205,6 +215,7 @@ result = lx.extract(
 ```
 
 ### Using the Factory for Advanced Control
+
 ```python
 # When you need explicit provider selection or advanced configuration
 from langcore import factory
@@ -221,6 +232,7 @@ model = factory.create_model(config)
 ```
 
 ### Direct Provider Usage
+
 ```python
 import langcore as lx
 
@@ -243,6 +255,7 @@ outputs = model.infer(["prompt1", "prompt2"])
 Creating a provider plugin? Follow this checklist:
 
 #### ☐ **1. Setup Package Structure**
+
 ```
 langcore-yourprovider/
 ├── pyproject.toml              # Package config with entry point
@@ -255,6 +268,7 @@ langcore-yourprovider/
 ```
 
 #### ☐ **2. Configure Entry Point** (`pyproject.toml`)
+
 ```toml
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -263,13 +277,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "langcore-yourprovider"
 version = "0.1.0"
-dependencies = ["langcore>=1.0.0"]
+dependencies = ["langcore"]
 
 [project.entry-points."langcore.providers"]
 yourprovider = "langcore_yourprovider:YourProviderLanguageModel"
 ```
 
 #### ☐ **3. Implement Provider** (`provider.py`)
+
 - [ ] Import required modules
 - [ ] Add `@lx.providers.registry.register()` decorator with patterns
 - [ ] Inherit from `lx.inference.BaseLanguageModel`
@@ -278,6 +293,7 @@ yourprovider = "langcore_yourprovider:YourProviderLanguageModel"
 - [ ] Export class from `__init__.py`
 
 #### ☐ **4. (Optional) Add Schema Support** (`schema.py`)
+
 - [ ] Create schema class inheriting from `lx.schema.BaseSchema`
 - [ ] Implement `from_examples()` class method
 - [ ] Implement `to_provider_config()` method
@@ -285,22 +301,25 @@ yourprovider = "langcore_yourprovider:YourProviderLanguageModel"
 - [ ] Handle schema in provider's `__init__()` and `infer()`
 
 #### ☐ **5. Testing**
+
 - [ ] Install plugin with `pip install -e .`
 - [ ] Test that your provider loads and handles basic inference
 - [ ] Verify schema support works (if implemented)
 
 #### ☐ **6. Documentation**
+
 - [ ] Document supported model IDs and patterns
 - [ ] List required environment variables
 - [ ] Provide usage examples
 - [ ] Document any provider-specific parameters
 
 #### ☐ **7. Distribution & Community**
+
 - [ ] Test installation with `pip install -e .`
 - [ ] Build package with `python -m build`
 - [ ] Test in clean environment
 - [ ] Publish to PyPI with `twine upload dist/*`
-- [ ] Share your provider by opening an issue on [LangCore GitHub](https://github.com/google/langcore/issues) to get feedback and help others discover it
+- [ ] Share your provider by opening an issue on [LangCore GitHub](https://github.com/ignatg/langcore/issues) to get feedback and help others discover it
 - [ ] Consider submitting a PR to add your provider to the community providers list (coming soon)
 
 ### Option 1: External Plugin (Recommended)
@@ -308,7 +327,9 @@ yourprovider = "langcore_yourprovider:YourProviderLanguageModel"
 External plugins are the recommended approach for adding new providers. They're easy to maintain, distribute, and don't require changes to the core package.
 
 #### For Users (Installing an External Plugin)
+
 Simply install the plugin package:
+
 ```bash
 pip install langcore-yourprovider
 # That's it! The provider is now available in langcore
@@ -317,6 +338,7 @@ pip install langcore-yourprovider
 #### For Developers (Creating an External Plugin)
 
 1. Create a new package:
+
 ```
 langcore-myprovider/
 ├── pyproject.toml
@@ -325,7 +347,8 @@ langcore-myprovider/
     └── __init__.py
 ```
 
-2. Configure entry point in `pyproject.toml`:
+1. Configure entry point in `pyproject.toml`:
+
 ```toml
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -334,7 +357,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "langcore-myprovider"
 version = "0.1.0"
-dependencies = ["langcore>=1.0.0", "your-sdk"]
+dependencies = ["langcore", "your-sdk"]
 
 [project.entry-points."langcore.providers"]
 # Pattern 1: Register the class directly
@@ -344,7 +367,8 @@ myprovider = "langcore_myprovider:MyProviderLanguageModel"
 # myprovider = "langcore_myprovider"
 ```
 
-3. Implement your provider:
+1. Implement your provider:
+
 ```python
 # langcore_myprovider/__init__.py
 import os
@@ -367,15 +391,18 @@ class MyProviderLanguageModel(lx.inference.BaseLanguageModel):
 ```
 
 **Pattern Registration Explained:**
+
 - The `@register` decorator patterns (e.g., `r'^mymodel'`, `r'^custom'`) define which model IDs your provider supports
 - When users call `lx.extract(model_id="mymodel-3b")`, the registry matches against these patterns
 - Your provider will handle any model_id starting with "mymodel" or "custom"
 - Users can explicitly select your provider using its class name:
+
   ```python
   config = lx.factory.ModelConfig(provider="MyProviderLanguageModel")
   # Or partial match: provider="myprovider" (matches class name)
 
-4. Publish your package to PyPI:
+1. Publish your package to PyPI:
+
 ```bash
 pip install build twine
 python -m build
@@ -484,6 +511,7 @@ class MyProviderLanguageModel(lx.inference.BaseLanguageModel):
 #### 3. Schema Usage
 
 When users set `use_schema_constraints=True`, LangCore will:
+
 1. Call your provider's `get_schema_class()`
 2. Use `from_examples()` to build a schema from provided examples
 3. Call `to_provider_config()` to get provider-specific kwargs
@@ -493,6 +521,7 @@ When users set `use_schema_constraints=True`, LangCore will:
 ### Option 2: Built-in Provider (Requires Core Team Approval)
 
 **⚠️ Note**: Adding a provider to the core package requires:
+
 - Significant community demand and support
 - Commitment to long-term maintenance
 - Approval from the LangCore maintainers
@@ -501,6 +530,7 @@ When users set `use_schema_constraints=True`, LangCore will:
 This approach should only be used for providers that benefit a large portion of the user base.
 
 1. Create your provider file:
+
 ```python
 # langcore/providers/myprovider.py
 import langcore as lx
@@ -510,13 +540,14 @@ class MyProviderLanguageModel(lx.inference.BaseLanguageModel):
     # Implementation same as above
 ```
 
-2. Import it in `providers/__init__.py`:
+1. Import it in `providers/__init__.py`:
+
 ```python
 # In langcore/providers/__init__.py
 from langcore.providers import myprovider  # noqa: F401
 ```
 
-3. Submit a pull request with:
+1. Submit a pull request with:
    - Provider implementation
    - Comprehensive tests
    - Documentation
@@ -530,7 +561,7 @@ The factory automatically resolves API keys from environment:
 |----------|------------------------------------------|
 | Gemini   | `GEMINI_API_KEY`, `LANGCORE_API_KEY` |
 | OpenAI   | `OPENAI_API_KEY`, `LANGCORE_API_KEY` |
-| Ollama   | `OLLAMA_BASE_URL` (default: http://localhost:11434) |
+| Ollama   | `OLLAMA_BASE_URL` (default: <http://localhost:11434>) |
 
 ## Design Principles
 
@@ -543,42 +574,55 @@ The factory automatically resolves API keys from environment:
 ## Common Issues
 
 ### Provider Not Found
+
 ```python
 ValueError: No provider registered for model_id='unknown-model'
 ```
+
 **Solution**: Check available patterns with `registry.list_entries()`
 
 ### Plugin Not Loading
+
 ```python
 # Your plugin isn't being discovered
 ```
+
 **Solutions**:
+
 1. Manually trigger loading: `lx.providers.load_plugins_once()`
 2. Check entry points are installed: `pip show -f your-package`
 3. Verify no typos in `pyproject.toml` entry point
 4. Ensure package is installed: `pip list | grep your-package`
 
 ### Missing Dependencies
+
 ```python
 InferenceConfigError: OpenAI provider requires openai package
 ```
+
 **Solution**: Install optional dependencies: `pip install langcore[openai]`
 
 ### Schema Not Working
+
 ```python
 # Schema constraints not being applied
 ```
+
 **Solutions**:
+
 1. Ensure provider implements `get_schema_class()`
 2. Check `use_schema_constraints=True` is set
 3. Verify schema's `supports_strict_mode` returns `True`
 4. Test schema creation with `Schema.from_examples(examples)`
 
 ### Pattern Conflicts
+
 ```python
 # Multiple providers match the same model_id
 ```
+
 **Solution**: Use explicit provider selection:
+
 ```python
 config = lx.factory.ModelConfig(
     model_id="model-name",

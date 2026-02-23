@@ -41,7 +41,7 @@ dependencies = [
 "Documentation" = "https://github.com/IgnatG/langcore/blob/main/README.md"
 "Bug Tracker" = "https://github.com/IgnatG/langcore/issues"
 "Changelog" = "https://github.com/IgnatG/langcore/blob/main/CHANGELOG.md"
-"Upstream" = "https://github.com/google/langcore"
+"Upstream" = "https://github.com/ignatg/langcore"
 
 [project.optional-dependencies]
 openai = ["openai>=1.50.0"]

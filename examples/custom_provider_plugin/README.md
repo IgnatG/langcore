@@ -5,9 +5,11 @@ This example demonstrates how to create a custom provider plugin that extends La
 **Note**: This is an example included in the LangCore repository for reference. It is not part of the LangCore package and won't be installed when you `pip install langcore`.
 
 **Automated Creation**: Instead of manually copying this example, use the [provider plugin generator script](../../scripts/create_provider_plugin.py):
+
 ```bash
 python scripts/create_provider_plugin.py MyProvider --with-schema
 ```
+
 This will create a complete plugin structure with all boilerplate code ready for customization.
 
 ## Structure
@@ -142,6 +144,7 @@ result = lx.extract(
 ## Creating Your Own Provider - Step by Step
 
 ### 1. Copy and Rename
+
 ```bash
 # Copy this example directory
 cp -r examples/custom_provider_plugin/ ~/langcore-myprovider/
@@ -152,26 +155,33 @@ mv langcore_provider_example langcore_myprovider
 ```
 
 ### 2. Update Package Configuration
+
 Edit `pyproject.toml`:
+
 - Change `name = "langcore-myprovider"`
 - Update description and author information
 - Change entry point: `myprovider = "langcore_myprovider:MyProvider"`
 
 ### 3. Modify Provider Implementation
+
 Edit `provider.py`:
+
 - Change class name from `CustomGeminiProvider` to `MyProvider`
 - Update `@register()` patterns to match your model IDs
 - Replace Gemini API calls with your backend
 - Add any provider-specific parameters
 
 ### 4. Add Schema Support (Optional)
+
 Edit `schema.py`:
+
 - Rename to `MyProviderSchema`
 - Customize `from_examples()` for your extraction format
 - Update `to_provider_config()` for your API requirements
 - Set `supports_strict_mode` based on your capabilities
 
 ### 5. Install and Test
+
 ```bash
 # Install in development mode
 pip install -e .
@@ -185,11 +195,13 @@ print('Provider registered:', any('myprovider' in str(e) for e in lx.providers.r
 ```
 
 ### 6. Write Tests
+
 - Test that your provider loads and handles basic inference
 - Verify schema support works (if implemented)
 - Test error handling for your specific API
 
 ### 7. Publish to PyPI and Share with Community
+
 ```bash
 # Build package
 python -m build
@@ -199,8 +211,9 @@ twine upload dist/*
 ```
 
 **Share with the community:**
+
 - Submit a PR to add your provider to the [Community Providers Registry](../../COMMUNITY_PROVIDERS.md)
-- Open an issue on [LangCore GitHub](https://github.com/google/langcore/issues) to announce your provider and get feedback
+- Open an issue on [LangCore GitHub](https://github.com/ignatg/langcore/issues) to announce your provider and get feedback
 
 ## Common Pitfalls to Avoid
 
