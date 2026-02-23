@@ -7,6 +7,8 @@ pylint warnings are expected for test fixtures.
 
 # pylint: disable=attribute-defined-outside-init
 
+import importlib
+import unittest
 from unittest import mock
 
 from absl.testing import absltest, parameterized
@@ -14,6 +16,8 @@ from absl.testing import absltest, parameterized
 from langcore import exceptions
 from langcore.core import base_model, data, types
 from langcore.providers import gemini, ollama, openai
+
+HAS_OPENAI = importlib.util.find_spec("openai") is not None
 
 
 class TestBaseLanguageModel(absltest.TestCase):
@@ -500,6 +504,7 @@ class TestGeminiLanguageModel(absltest.TestCase):
         )
 
 
+@unittest.skipUnless(HAS_OPENAI, "openai package not installed")
 class TestOpenAILanguageModelInference(parameterized.TestCase):
     @parameterized.named_parameters(
         ("without", "test-api-key", None, "gpt-4o-mini", 0.5),
@@ -544,6 +549,7 @@ class TestOpenAILanguageModelInference(parameterized.TestCase):
         self.assertEqual(results, expected_results)
 
 
+@unittest.skipUnless(HAS_OPENAI, "openai package not installed")
 class TestOpenAILanguageModel(absltest.TestCase):
     def test_openai_parse_output_json(self):
         model = openai.OpenAILanguageModel(

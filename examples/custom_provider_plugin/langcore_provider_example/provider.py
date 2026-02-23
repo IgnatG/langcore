@@ -1,4 +1,4 @@
-"""Minimal example of a custom provider plugin for LangExtract."""
+"""Minimal example of a custom provider plugin for LangCore."""
 
 from __future__ import annotations
 
@@ -15,9 +15,9 @@ from langcore_provider_example import schema as custom_schema
 )
 @dataclasses.dataclass(init=False)
 class CustomGeminiProvider(lx.inference.BaseLanguageModel):
-    """Example custom LangExtract provider implementation.
+    """Example custom LangCore provider implementation.
 
-    This demonstrates how to create a custom provider for LangExtract
+    This demonstrates how to create a custom provider for LangCore
     that can intercept and handle model requests. This example wraps
     the actual Gemini API to show how custom schemas integrate, but you
     would replace the Gemini calls with your own API or model implementation.
@@ -87,7 +87,7 @@ class CustomGeminiProvider(lx.inference.BaseLanguageModel):
     def get_schema_class(cls) -> type[lx.schema.BaseSchema] | None:
         """Return our custom schema class.
 
-        This allows LangExtract to use our custom schema implementation
+        This allows LangCore to use our custom schema implementation
         when use_schema_constraints=True is specified.
 
         Returns:
@@ -98,7 +98,7 @@ class CustomGeminiProvider(lx.inference.BaseLanguageModel):
     def apply_schema(self, schema_instance: lx.schema.BaseSchema | None) -> None:
         """Apply or clear schema configuration.
 
-        This method is called by LangExtract to dynamically apply schema
+        This method is called by LangCore to dynamically apply schema
         constraints after the provider is instantiated. It's important to
         handle both the application of a new schema and clearing (None).
 

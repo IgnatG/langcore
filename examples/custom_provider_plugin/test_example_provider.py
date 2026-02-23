@@ -4,7 +4,7 @@ import os
 
 import dotenv
 
-# Import the provider to trigger registration with LangExtract
+# Import the provider to trigger registration with LangCore
 # Note: This manual import is only needed when running without installation.
 # After `pip install -e .`, the entry point system handles this automatically.
 from langcore_provider_example import CustomGeminiProvider  # noqa: F401

@@ -1,13 +1,13 @@
 # Medication Extraction Examples
 
-LangExtract excels at extracting structured medical information from clinical text, making it particularly useful for healthcare applications. The methodology originated from research in medical information extraction, where early versions of the techniques were demonstrated to accelerate annotation tasks significantly.
+LangCore excels at extracting structured medical information from clinical text, making it particularly useful for healthcare applications. The methodology originated from research in medical information extraction, where early versions of the techniques were demonstrated to accelerate annotation tasks significantly.
 
 > **Disclaimer:** This demonstration is only for illustrative purposes of LangCore's baseline capability. It does not represent a finished or approved product, is not intended to diagnose or suggest treatment of any disease or condition, and should not be used for medical advice.
 
 ---
 
 **Medical Information Extraction Research:**
-The concepts and methods underlying LangExtract were first demonstrated in:
+The concepts and methods underlying LangCore were first demonstrated in:
 
 Goel, A., Lehman, E., Gulati, A., Chen, R., Nori, H., Hager, G. D., & Durr, N. J. (2023).
 "LLMs Accelerate Annotation for Medical Information Extraction."
@@ -18,7 +18,7 @@ Goel, A., Lehman, E., Gulati, A., Chen, R., Nori, H., Hager, G. D., & Durr, N. J
 
 ## Basic Named Entity Recognition (NER)
 
-In this basic medical example, LangExtract extracts structured medication information:
+In this basic medical example, LangCore extracts structured medication information:
 
 ```python
 import langcore as lx
@@ -48,7 +48,7 @@ result = lx.extract(
     prompt_description=prompt_description,
     examples=examples,
     model_id="gemini-2.5-pro",
-    api_key="your-api-key-here"  # Optional if LANGEXTRACT_API_KEY environment variable is set
+    api_key="your-api-key-here"  # Optional if LANGCORE_API_KEY environment variable is set
 )
 
 # Display entities with positions
@@ -95,7 +95,7 @@ The interactive HTML visualization allows you to explore the extracted entities 
 
 ## Relationship Extraction (RE)
 
-For more complex extractions that involve relationships between entities, LangExtract can also extract structured relationships. This example shows how to extract medications and their associated attributes:
+For more complex extractions that involve relationships between entities, LangCore can also extract structured relationships. This example shows how to extract medications and their associated attributes:
 
 ```python
 import langcore as lx
@@ -168,7 +168,7 @@ result = lx.extract(
     prompt_description=prompt_description,
     examples=examples,
     model_id="gemini-2.5-pro",
-    api_key="your-api-key-here"  # Optional if LANGEXTRACT_API_KEY environment variable is set
+    api_key="your-api-key-here"  # Optional if LANGCORE_API_KEY environment variable is set
 )
 
 # Display grouped medications

@@ -1,6 +1,6 @@
 # Ollama Examples
 
-This directory contains examples for using LangExtract with Ollama for local LLM inference.
+This directory contains examples for using LangCore with Ollama for local LLM inference.
 
 For setup instructions and documentation, see the [main README's Ollama section](../../README.md#using-local-llms-with-ollama).
 
@@ -26,7 +26,7 @@ docker-compose up
 
 - `demo_ollama.py` - Comprehensive extraction examples demonstrating Ollama on README examples
 - `docker-compose.yml` - Production-ready Docker setup with health checks
-- `Dockerfile` - Container definition for LangExtract
+- `Dockerfile` - Container definition for LangCore
 
 ## Configuration Options
 

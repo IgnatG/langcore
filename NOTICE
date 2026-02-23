@@ -22,4 +22,4 @@ Significant additions and modifications by Gabriel Ignat include:
 - Prompt alignment validation
 - Provider plugin architecture (LiteLLM, DSPy, Guardrails, etc.)
 - RAG query parsing (langcore-rag)
-- Audit and compliance tooling (langextract-audit)
+- Audit and compliance tooling (langcore-audit)

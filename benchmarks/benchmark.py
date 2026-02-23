@@ -73,7 +73,7 @@ class BenchmarkRunner:
     def print_header(self):
         """Print benchmark header."""
         print("=" * config.DISPLAY.separator_width)
-        print("LANGEXTRACT BENCHMARK")
+        print("LANGCORE BENCHMARK")
         print("=" * config.DISPLAY.separator_width)
         print(f"Branch: {self.git_info['branch']} | Commit: {self.git_info['commit']}")
         print("-" * config.DISPLAY.separator_width)

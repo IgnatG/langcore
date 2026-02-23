@@ -26,7 +26,7 @@ htmlcov/
 .coverage.*
 
 # Generated Output & Data
-# LangExtract outputs are defaulted to test_output/
+# LangCore outputs are defaulted to test_output/
 /test_output/
 
 # Sphinx documentation build output
@@ -152,7 +152,7 @@ cache/
 *.ogg
 
 # Benchmark results and local environment
-langextract_env/
+langcore_env/
 benchmarks/benchmark_results
 
 # Benchmark results in root

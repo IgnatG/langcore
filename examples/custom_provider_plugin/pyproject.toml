@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "langcore-provider-example"  # Change to your package name
 version = "0.1.0"  # Update version for releases
-description = "Example custom provider plugin for LangExtract"
+description = "Example custom provider plugin for LangCore"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}

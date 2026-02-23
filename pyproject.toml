@@ -41,18 +41,20 @@ dependencies = [
 "Documentation" = "https://github.com/IgnatG/langcore/blob/main/README.md"
 "Bug Tracker" = "https://github.com/IgnatG/langcore/issues"
 "Changelog" = "https://github.com/IgnatG/langcore/blob/main/CHANGELOG.md"
-"Upstream" = "https://github.com/google/langextract"
+"Upstream" = "https://github.com/google/langcore"
 
 [project.optional-dependencies]
 openai = ["openai>=1.50.0"]
 all = ["openai>=1.50.0"]
 test = [
     "pytest>=9.0",
+    "pytest-asyncio>=0.25.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.0",
+    "pytest-asyncio>=0.25.0",
     "ruff>=0.15.2",
 ]
 
@@ -96,6 +98,7 @@ markers = [
     "requires_pip: marks tests that perform pip install/uninstall operations",
     "integration: marks integration tests that test multiple components together",
 ]
+asyncio_mode = "auto"
 
 [tool.ruff]
 target-version = "py312"

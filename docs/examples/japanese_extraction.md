@@ -1,6 +1,6 @@
 # Japanese Information Extraction
 
-This example demonstrates how to use LangExtract to extract structured information from Japanese text.
+This example demonstrates how to use LangCore to extract structured information from Japanese text.
 
 > **Note:** For non-spaced languages like Japanese, use `UnicodeTokenizer` to ensure correct character-based segmentation and alignment.
 

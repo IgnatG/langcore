@@ -12,6 +12,7 @@ from langcore.core.schema import (
     ConstraintType,
     FormatModeSchema,
 )
+from langcore.providers.schemas.gemini import GeminiSchema
 
 __all__ = [
     "ATTRIBUTE_SUFFIX",
@@ -20,4 +21,5 @@ __all__ = [
     "Constraint",
     "ConstraintType",
     "FormatModeSchema",
+    "GeminiSchema",
 ]

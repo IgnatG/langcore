@@ -1,8 +1,8 @@
 # Custom Provider Plugin Example
 
-This example demonstrates how to create a custom provider plugin that extends LangExtract with your own model backend.
+This example demonstrates how to create a custom provider plugin that extends LangCore with your own model backend.
 
-**Note**: This is an example included in the LangExtract repository for reference. It is not part of the LangExtract package and won't be installed when you `pip install langcore`.
+**Note**: This is an example included in the LangCore repository for reference. It is not part of the LangCore package and won't be installed when you `pip install langcore`.
 
 **Automated Creation**: Instead of manually copying this example, use the [provider plugin generator script](../../scripts/create_provider_plugin.py):
 ```bash
@@ -46,7 +46,7 @@ class CustomGeminiProvider(lx.inference.BaseLanguageModel):
 custom_gemini = "langcore_provider_example:CustomGeminiProvider"
 ```
 
-This entry point allows LangExtract to automatically discover your provider.
+This entry point allows LangCore to automatically discover your provider.
 
 ### Custom Schema Support (`schema.py`)
 
@@ -81,7 +81,7 @@ Then in your provider:
 class CustomProvider(lx.inference.BaseLanguageModel):
     @classmethod
     def get_schema_class(cls):
-        return CustomProviderSchema  # Tell LangExtract about your schema
+        return CustomProviderSchema  # Tell LangCore about your schema
 
     def __init__(self, **kwargs):
         # Receive schema config in kwargs when use_schema_constraints=True
@@ -200,7 +200,7 @@ twine upload dist/*
 
 **Share with the community:**
 - Submit a PR to add your provider to the [Community Providers Registry](../../COMMUNITY_PROVIDERS.md)
-- Open an issue on [LangExtract GitHub](https://github.com/google/langcore/issues) to announce your provider and get feedback
+- Open an issue on [LangCore GitHub](https://github.com/google/langcore/issues) to announce your provider and get feedback
 
 ## Common Pitfalls to Avoid
 

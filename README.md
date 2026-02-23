@@ -2,14 +2,14 @@
 
 ## Overview
 
-**LangCore** is a Python library for LLM-powered structured information extraction from unstructured text. It is built on top of Google's open-source [LangExtract](https://github.com/google/langcore) library (Apache 2.0), extending it with additional capabilities for production  document processing workflows.
+**LangCore** is a Python library for LLM-powered structured information extraction from unstructured text. It is built on top of Google's open-source [LangCore](https://github.com/google/langcore) library (Apache 2.0), extending it with additional capabilities for production  document processing workflows.
 
-> **Attribution:** The core extraction engine is derived from [LangExtract by Google LLC](https://github.com/google/langcore). See the [NOTICE](NOTICE) file for full attribution details.
+> **Attribution:** The core extraction engine is derived from [LangCore by Google LLC](https://github.com/google/langcore). See the [NOTICE](NOTICE) file for full attribution details.
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [What's Added Over LangExtract](#whats-added-over-langextract)
+- [What's Added Over LangCore](#whats-added-over-langcore)
 - [Core Capabilities](#core-capabilities)
 - [Feature Comparison](#feature-comparison)
 - [Quick Start](#quick-start)
@@ -28,9 +28,9 @@
 - [Testing](#testing)
 - [License](#license)
 
-## What's Added Over LangExtract
+## What's Added Over LangCore
 
-LangCore extends Google's LangExtract with the following features developed by Veritas Lex:
+LangCore extends Google's LangCore with the following features:
 
 | Feature | Description |
 |---|---|
@@ -40,7 +40,7 @@ LangCore extends Google's LangExtract with the following features developed by V
 | **Quality Metrics & Evaluation** | Built-in P/R/F1/accuracy metrics with per-field and per-document breakdown |
 | **Multi-pass Confidence** | Cross-pass frequency augmentation for higher-confidence extractions |
 | **Prompt Alignment Validation** | Warnings when few-shot examples contain non-verbatim text |
-| **Plugin Ecosystem** | First-party plugins: `langcore-rag`, `langextract-guardrails`, `langextract-dspy`, `langextract-litellm`, `langextract-audit` |
+| **Plugin Ecosystem** | First-party plugins: `langcore-rag`, `langcore-guardrails`, `langcore-dspy`, `langcore-litellm`, `langcore-audit` |
 
 ## Core Capabilities
 
@@ -97,7 +97,7 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | **Fault-tolerant callbacks** | ✅ Exceptions logged & swallowed | ❌ | ❌ | ❌ |
 | **Token usage tracking** | ⚠️ Via API layer | ❌ | ✅ `response.usage` | ❌ |
 
-### Validation & Guardrails (`langextract-guardrails` plugin)
+### Validation & Guardrails (`langcore-guardrails` plugin)
 
 | Feature | LangCore + Guardrails | LangStruct | Instructor | Guardrails AI |
 |---|---|---|---|---|
@@ -115,7 +115,7 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | **Batch-independent retries** | ✅ Each prompt retries independently | ❌ | ❌ | ❌ |
 | **Async concurrency control** | ✅ `max_concurrency` semaphore | ❌ | ✅ | ❌ |
 
-### DSPy Prompt Optimization (`langextract-dspy` plugin)
+### DSPy Prompt Optimization (`langcore-dspy` plugin)
 
 | Feature | LangCore + DSPy | LangStruct | Instructor | Guardrails AI |
 |---|---|---|---|---|
@@ -132,7 +132,7 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | **Google Gemini** | ✅ Built-in | ❌ | ✅ | ✅ |
 | **OpenAI / GPT** | ✅ Via providers | ❌ | ✅ Native | ✅ |
 | **Local LLMs (Ollama)** | ✅ Built-in | ❌ | ⚠️ Via patches | ❌ |
-| **LiteLLM (100+ models)** | ✅ Via `langextract-litellm` | ✅ | ❌ | ✅ |
+| **LiteLLM (100+ models)** | ✅ Via `langcore-litellm` | ✅ | ❌ | ✅ |
 | **Custom model providers** | ✅ `BaseLanguageModel` ABC | ❌ | ❌ | ❌ |
 | **Community provider plugins** | ✅ Plugin registry | ❌ | ❌ | ❌ |
 
@@ -213,7 +213,7 @@ examples = [
 ]
 ```
 
-> **Note:** Examples drive model behavior. Each `extraction_text` should ideally be verbatim from the example's `text` (no paraphrasing), listed in order of appearance. LangExtract raises `Prompt alignment` warnings by default if examples don't follow this pattern—resolve these for best results.
+> **Note:** Examples drive model behavior. Each `extraction_text` should ideally be verbatim from the example's `text` (no paraphrasing), listed in order of appearance. LangCore raises `Prompt alignment` warnings by default if examples don't follow this pattern—resolve these for best results.
 
 ### 2. Run the Extraction
 
@@ -238,7 +238,7 @@ result = lx.extract(
 
 ### 3. Visualize the Results
 
-The extractions can be saved to a `.jsonl` file, a popular format for working with language model data. LangExtract can then generate an interactive HTML visualization from this file to review the entities in context.
+The extractions can be saved to a `.jsonl` file, a popular format for working with language model data. LangCore can then generate an interactive HTML visualization from this file to review the entities in context.
 
 ```python
 # Save the results to a JSONL file
@@ -279,7 +279,7 @@ result = lx.extract(
 > **Multi-pass & caching:** When `extraction_passes > 1`, the first pass uses
 > normal caching behaviour while subsequent passes include a `pass_num` keyword
 > argument that providers can use to bypass response caches. The
-> [langextract-litellm](https://github.com/JustStas/langextract-litellm)
+> [langcore-litellm](https://github.com/JustStas/langcore-litellm)
 > provider does this automatically — passes ≥ 2 always hit the live LLM API.
 
 This approach can extract hundreds of entities from full novels while maintaining high accuracy. The interactive visualization seamlessly handles large result sets, making it easy to explore hundreds of entities from the output JSONL file. **[See the full *Romeo and Juliet* extraction example →](docs/examples/longer_text_example.md)** for detailed results and performance insights.
@@ -292,7 +292,7 @@ See an example of the Vertex AI Batch API usage in [this example](docs/examples/
 
 ### Schema-First Extraction with Pydantic
 
-Instead of manually constructing `ExampleData` objects, you can define your extraction schema as a Pydantic model. LangExtract will auto-generate the prompt and schema constraints for you.
+Instead of manually constructing `ExampleData` objects, you can define your extraction schema as a Pydantic model. LangCore will auto-generate the prompt and schema constraints for you.
 
 ```python
 from pydantic import BaseModel, Field
@@ -477,14 +477,14 @@ pip install -e ".[test]"
 
 ```bash
 docker build -t langcore .
-docker run --rm -e LANGEXTRACT_API_KEY="your-api-key" langcore python your_script.py
+docker run --rm -e LANGCORE_API_KEY="your-api-key" langcore python your_script.py
 ```
 
 ## API Key Setup for Cloud Models
 
-When using LangExtract with cloud-hosted models (like Gemini or OpenAI), you'll need to
+When using LangCore with cloud-hosted models (like Gemini or OpenAI), you'll need to
 set up an API key. On-device models don't require an API key. For developers
-using local LLMs, LangExtract offers built-in support for Ollama and can be
+using local LLMs, LangCore offers built-in support for Ollama and can be
 extended to other third-party APIs by updating the inference endpoints.
 
 ### API Key Sources
@@ -500,7 +500,7 @@ Get API keys from:
 **Option 1: Environment Variable**
 
 ```bash
-export LANGEXTRACT_API_KEY="your-api-key-here"
+export LANGCORE_API_KEY="your-api-key-here"
 ```
 
 **Option 2: .env File (Recommended)**
@@ -510,7 +510,7 @@ Add your API key to a `.env` file:
 ```bash
 # Add API key to .env file
 cat >> .env << 'EOF'
-LANGEXTRACT_API_KEY=your-api-key-here
+LANGCORE_API_KEY=your-api-key-here
 EOF
 
 # Keep your API key secure
@@ -564,7 +564,7 @@ result = lx.extract(
 
 ## Adding Custom Model Providers
 
-LangExtract supports custom LLM providers via a lightweight plugin system. You can add support for new models without changing core code.
+LangCore supports custom LLM providers via a lightweight plugin system. You can add support for new models without changing core code.
 
 - Add new model support independently of the core library
 - Distribute your provider as a separate Python package
@@ -580,7 +580,7 @@ See the detailed guide in [Provider System Documentation](langcore/providers/REA
 
 ## Using OpenAI Models
 
-LangExtract supports OpenAI models (requires optional dependency: `pip install langcore[openai]`):
+LangCore supports OpenAI models (requires optional dependency: `pip install langcore[openai]`):
 
 ```python
 import langcore as lx
@@ -596,11 +596,11 @@ result = lx.extract(
 )
 ```
 
-Note: OpenAI models require `fence_output=True` and `use_schema_constraints=False` because LangExtract doesn't implement schema constraints for OpenAI yet.
+Note: OpenAI models require `fence_output=True` and `use_schema_constraints=False` because LangCore doesn't implement schema constraints for OpenAI yet.
 
 ## Using Local LLMs with Ollama
 
-LangExtract supports local inference using Ollama, allowing you to run models without API keys:
+LangCore supports local inference using Ollama, allowing you to run models without API keys:
 
 ```python
 import langcore as lx
@@ -622,11 +622,11 @@ For detailed installation, Docker setup, and examples, see [`examples/ollama/`](
 
 ## More Examples
 
-Additional examples of LangExtract in action:
+Additional examples of LangCore in action:
 
 ### *Romeo and Juliet* Full Text Extraction
 
-LangExtract can process complete documents directly from URLs. This example demonstrates extraction from the full text of *Romeo and Juliet* from Project Gutenberg (147,843 characters), showing parallel processing, sequential extraction passes, and performance optimization for long document processing.
+LangCore can process complete documents directly from URLs. This example demonstrates extraction from the full text of *Romeo and Juliet* from Project Gutenberg (147,843 characters), showing parallel processing, sequential extraction passes, and performance optimization for long document processing.
 
 **[View *Romeo and Juliet* Full Text Example →](docs/examples/longer_text_example.md)**
 
@@ -634,13 +634,13 @@ LangExtract can process complete documents directly from URLs. This example demo
 
 > **Disclaimer:** This demonstration is for illustrative purposes of LangCore's baseline capability only. It does not represent a finished or approved product, is not intended to diagnose or suggest treatment of any disease or condition, and should not be used for medical advice.
 
-LangExtract excels at extracting structured medical information from clinical text. These examples demonstrate both basic entity recognition (medication names, dosages, routes) and relationship extraction (connecting medications to their attributes), showing LangCore's effectiveness for healthcare applications.
+LangCore excels at extracting structured medical information from clinical text. These examples demonstrate both basic entity recognition (medication names, dosages, routes) and relationship extraction (connecting medications to their attributes), showing LangCore's effectiveness for healthcare applications.
 
 **[View Medication Examples →](docs/examples/medication_examples.md)**
 
 ### Radiology Report Structuring: RadExtract
 
-Explore RadExtract, a live interactive demo on HuggingFace Spaces that shows how LangExtract can automatically structure radiology reports. Try it directly in your browser with no setup required.
+Explore RadExtract, a live interactive demo on HuggingFace Spaces that shows how LangCore can automatically structure radiology reports. Try it directly in your browser with no setup required.
 
 **[View RadExtract Demo →](https://huggingface.co/spaces/google/radextract)**
 
@@ -651,10 +651,10 @@ LangCore has a growing plugin ecosystem:
 | Plugin | Description |
 |---|---|
 | [`langcore-rag`](../langcore-rag/) | RAG query parsing — converts natural language queries into semantic terms + structured filters |
-| [`langextract-litellm`](../langextract-litellm/) | LiteLLM provider for 100+ LLM backends (OpenAI, Azure, Anthropic, etc.) |
-| [`langextract-guardrails`](../langextract-guardrails/) | Validation + retry loop with Pydantic, JSON Schema, confidence threshold, and consistency validators |
-| [`langextract-dspy`](../langextract-dspy/) | DSPy prompt optimization (MIPROv2, GEPA) with evaluation and persist/load support |
-| [`langextract-audit`](../langextract-audit/) | Audit and compliance tooling for extraction pipelines |
+| [`langcore-litellm`](../langcore-litellm/) | LiteLLM provider for 100+ LLM backends (OpenAI, Azure, Anthropic, etc.) |
+| [`langcore-guardrails`](../langcore-guardrails/) | Validation + retry loop with Pydantic, JSON Schema, confidence threshold, and consistency validators |
+| [`langcore-dspy`](../langcore-dspy/) | DSPy prompt optimization (MIPROv2, GEPA) with evaluation and persist/load support |
+| [`langcore-audit`](../langcore-audit/) | Audit and compliance tooling for extraction pipelines |
 
 For detailed instructions on creating a provider plugin, see the [Custom Provider Plugin Example](examples/custom_provider_plugin/).
 
@@ -720,7 +720,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full development guidelines.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full terms.
 
-This project includes code originally developed by Google LLC as [LangExtract](https://github.com/google/langcore). See [NOTICE](NOTICE) for attribution details.
+This project includes code originally developed by Google LLC as [LangCore](https://github.com/google/langcore). See [NOTICE](NOTICE) for attribution details.
 
 ---
 

@@ -232,6 +232,7 @@ class TestAsyncExtractFunction:
             model=model,
             show_progress=False,
             prompt_validation_level="OFF",
+            format_type=data.FormatType.YAML,
         )
 
         assert isinstance(result, data.AnnotatedDocument)

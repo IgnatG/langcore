@@ -1,6 +1,6 @@
-# LangExtract Provider System
+# LangCore Provider System
 
-This directory contains the provider system for LangExtract, which enables support for different Large Language Model (LLM) backends.
+This directory contains the provider system for LangCore, which enables support for different Large Language Model (LLM) backends.
 
 **Quick Start**: Use the [provider plugin generator script](../../scripts/create_provider_plugin.py) to create a new provider in minutes:
 ```bash
@@ -18,7 +18,7 @@ The provider system uses a **registry pattern** with **automatic discovery**:
 ### Provider Resolution Flow
 
 ```
-User Code                    LangExtract                      Provider
+User Code                    LangCore                      Provider
 ─────────                    ───────────                      ────────
     |                             |                              |
     | lx.extract(                 |                              |
@@ -90,7 +90,7 @@ Ships with langcore, but requires extra installation:
   - Future: May be moved to external plugin package
 
 ### 3. External Plugins (Third-party)
-Separate packages that extend LangExtract with new providers:
+Separate packages that extend LangCore with new providers:
 - **Installed separately**: `pip install langcore-yourprovider`
 - **Auto-discovered**: Uses Python entry points for automatic registration
 - **Zero configuration**: Import langcore and the provider is available
@@ -130,7 +130,7 @@ result = lx.extract(
 **Important Notes:**
 - Plugin loading is **lazy** - plugins are discovered when first needed
 - To manually trigger plugin loading: `lx.providers.load_plugins_once()`
-- Set `LANGEXTRACT_DISABLE_PLUGINS=1` to disable plugin loading
+- Set `LANGCORE_DISABLE_PLUGINS=1` to disable plugin loading
 - Registry entries are tuples: `(patterns_list, priority_int)`
 
 ## How Provider Selection Works
@@ -300,7 +300,7 @@ yourprovider = "langcore_yourprovider:YourProviderLanguageModel"
 - [ ] Build package with `python -m build`
 - [ ] Test in clean environment
 - [ ] Publish to PyPI with `twine upload dist/*`
-- [ ] Share your provider by opening an issue on [LangExtract GitHub](https://github.com/google/langcore/issues) to get feedback and help others discover it
+- [ ] Share your provider by opening an issue on [LangCore GitHub](https://github.com/google/langcore/issues) to get feedback and help others discover it
 - [ ] Consider submitting a PR to add your provider to the community providers list (coming soon)
 
 ### Option 1: External Plugin (Recommended)
@@ -455,7 +455,7 @@ class MyProviderLanguageModel(lx.inference.BaseLanguageModel):
 
     @classmethod
     def get_schema_class(cls):
-        """Tell LangExtract about our schema support."""
+        """Tell LangCore about our schema support."""
         from langcore_myprovider.schema import MyProviderSchema
         return MyProviderSchema
 
@@ -483,7 +483,7 @@ class MyProviderLanguageModel(lx.inference.BaseLanguageModel):
 
 #### 3. Schema Usage
 
-When users set `use_schema_constraints=True`, LangExtract will:
+When users set `use_schema_constraints=True`, LangCore will:
 1. Call your provider's `get_schema_class()`
 2. Use `from_examples()` to build a schema from provided examples
 3. Call `to_provider_config()` to get provider-specific kwargs
@@ -495,7 +495,7 @@ When users set `use_schema_constraints=True`, LangExtract will:
 **⚠️ Note**: Adding a provider to the core package requires:
 - Significant community demand and support
 - Commitment to long-term maintenance
-- Approval from the LangExtract maintainers
+- Approval from the LangCore maintainers
 - A pull request to the main repository
 
 This approach should only be used for providers that benefit a large portion of the user base.
@@ -528,8 +528,8 @@ The factory automatically resolves API keys from environment:
 
 | Provider | Environment Variables (in priority order) |
 |----------|------------------------------------------|
-| Gemini   | `GEMINI_API_KEY`, `LANGEXTRACT_API_KEY` |
-| OpenAI   | `OPENAI_API_KEY`, `LANGEXTRACT_API_KEY` |
+| Gemini   | `GEMINI_API_KEY`, `LANGCORE_API_KEY` |
+| OpenAI   | `OPENAI_API_KEY`, `LANGCORE_API_KEY` |
 | Ollama   | `OLLAMA_BASE_URL` (default: http://localhost:11434) |
 
 ## Design Principles

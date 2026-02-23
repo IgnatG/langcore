@@ -731,9 +731,9 @@ class Annotator:
                 **kwargs,
             )
         )
-        assert (
-            len(annotations) == 1
-        ), f"Expected 1 annotation but got {len(annotations)} annotations."
+        assert len(annotations) == 1, (
+            f"Expected 1 annotation but got {len(annotations)} annotations."
+        )
 
         if debug and annotations[0].extractions:
             elapsed_time = time.time() - start_time if start_time else None
@@ -1070,9 +1070,9 @@ class Annotator:
                     document_usage[doc_id]["prompt_tokens"] += annotated_doc.usage.get(
                         "prompt_tokens", 0
                     )
-                    document_usage[doc_id][
-                        "completion_tokens"
-                    ] += annotated_doc.usage.get("completion_tokens", 0)
+                    document_usage[doc_id]["completion_tokens"] += (
+                        annotated_doc.usage.get("completion_tokens", 0)
+                    )
                     document_usage[doc_id]["total_tokens"] += annotated_doc.usage.get(
                         "total_tokens", 0
                     )
@@ -1189,9 +1189,9 @@ class Annotator:
             tokenizer=tokenizer,
             **kwargs,
         )
-        assert (
-            len(annotations) == 1
-        ), f"Expected 1 annotation but got {len(annotations)} annotations."
+        assert len(annotations) == 1, (
+            f"Expected 1 annotation but got {len(annotations)} annotations."
+        )
 
         if debug and annotations[0].extractions:
             elapsed_time = time.time() - start_time if start_time else None

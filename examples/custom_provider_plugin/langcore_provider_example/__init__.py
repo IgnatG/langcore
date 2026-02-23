@@ -1,4 +1,4 @@
-"""Example custom provider plugin for LangExtract."""
+"""Example custom provider plugin for LangCore."""
 
 from langcore_provider_example.provider import CustomGeminiProvider
 

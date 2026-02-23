@@ -731,7 +731,7 @@ def print_summary(
       with_schema: Whether to include schema support.
     """
     print("\n" + "=" * 60)
-    print("LANGEXTRACT PROVIDER PLUGIN GENERATOR")
+    print("LANGCORE PROVIDER PLUGIN GENERATOR")
     print("=" * 60)
     print(f"Provider Name: {provider_name}")
     print(f"Package Name: langcore-{package_name}")

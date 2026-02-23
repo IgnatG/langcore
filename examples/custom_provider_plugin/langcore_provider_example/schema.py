@@ -12,7 +12,7 @@ class CustomProviderSchema(lx.schema.BaseSchema):
     """Example custom schema implementation for a provider plugin.
 
     This demonstrates how plugins can provide their own schema implementations
-    that integrate with LangExtract's schema system. Custom schemas allow
+    that integrate with LangCore's schema system. Custom schemas allow
     providers to:
 
     1. Generate provider-specific constraints from examples
@@ -43,7 +43,7 @@ class CustomProviderSchema(lx.schema.BaseSchema):
 
         This method analyzes the provided examples to build a schema that
         captures the structure of expected extractions. Called automatically
-        by LangExtract when use_schema_constraints=True.
+        by LangCore when use_schema_constraints=True.
 
         Args:
           examples_data: Example extractions to learn from.

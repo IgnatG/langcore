@@ -43,9 +43,11 @@ class DataLibToDictParameterizedTest(parameterized.TestCase):
                         "group_index": 0,
                         "description": None,
                         "attributes": None,
+                        "confidence_score": None,
                     },
                 ],
                 "text": "Just a short sentence.",
+                "usage": None,
             },
         ),
         dict(
@@ -85,6 +87,7 @@ class DataLibToDictParameterizedTest(parameterized.TestCase):
                         "group_index": 0,
                         "description": None,
                         "attributes": None,
+                        "confidence_score": None,
                     },
                     {
                         "extraction_class": "symptom",
@@ -95,9 +98,11 @@ class DataLibToDictParameterizedTest(parameterized.TestCase):
                         "group_index": 0,
                         "description": None,
                         "attributes": None,
+                        "confidence_score": None,
                     },
                 ],
                 "text": "Patient Jane reported a headache.",
+                "usage": None,
             },
         ),
         dict(
@@ -144,6 +149,7 @@ class DataLibToDictParameterizedTest(parameterized.TestCase):
                             "severity": "mild",
                             "persistence": "persistent",
                         },
+                        "confidence_score": None,
                     },
                     {
                         "extraction_class": "symptom",
@@ -154,9 +160,11 @@ class DataLibToDictParameterizedTest(parameterized.TestCase):
                         "group_index": 1,
                         "description": None,
                         "attributes": None,
+                        "confidence_score": None,
                     },
                 ],
                 "text": "He has mild chest pain and a cough.",
+                "usage": None,
             },
         ),
     )
