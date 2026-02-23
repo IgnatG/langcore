@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.1 (2026-02-23)
+
+### Bug Fixes
+
+- Fixed failing tests
+  ([`e007322`](https://github.com/IgnatG/langcore/commit/e00732266dfbc7b9f9856c0a85bd447ebb5bd4c5))
+
+
 ## v1.0.0 (2026-02-23)
 
 - Initial Release
