@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.2 (2026-02-23)
+
+### Bug Fixes
+
+- Update repository links and improve documentation for provider plugin creation
+  ([`4ca737c`](https://github.com/IgnatG/langcore/commit/4ca737c9bb3c4ef0225cb4b502427b111525bf75))
+
+
 ## v1.0.1 (2026-02-23)
 
 ### Bug Fixes
