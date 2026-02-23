@@ -1,0 +1,25 @@
+LangCore
+Copyright 2025-2026 Gabriel Ignat
+
+This product includes software originally developed by Google LLC
+as "LangExtract" (<https://github.com/google/langextract>).
+
+Original work Copyright 2025 Google LLC, licensed under the
+Apache License, Version 2.0 (<http://www.apache.org/licenses/LICENSE-2.0>).
+
+Modifications and additional features have been made by Gabriel Ignat
+under the same Apache 2.0 license. See the LICENSE file for full terms.
+
+---
+
+Significant additions and modifications by Gabriel Ignat include:
+
+- Pydantic schema-driven extraction (schema_adapter, schema_generator)
+- Confidence scoring with configurable weights
+- Extraction hooks and event lifecycle system
+- Quality metrics and evaluation module
+- Multi-pass confidence augmentation
+- Prompt alignment validation
+- Provider plugin architecture (LiteLLM, DSPy, Guardrails, etc.)
+- RAG query parsing (langcore-rag)
+- Audit and compliance tooling (langextract-audit)

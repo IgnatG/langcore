@@ -1,0 +1,28 @@
+services:
+  ollama:
+    image: ollama/ollama:0.5.4
+    ports:
+      - "127.0.0.1:11434:11434"  # Bind only to localhost for security
+    volumes:
+      - ollama-data:/root/.ollama  # Cross-platform support
+    command: serve
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  langcore:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - .:/app
+    command: python demo_ollama.py
+
+volumes:
+  ollama-data:
