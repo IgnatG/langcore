@@ -35,9 +35,7 @@ _API_CONFIG_KEYS: Final[set[str]] = {
     priority=patterns.GEMINI_PRIORITY,
 )
 @dataclasses.dataclass(init=False)
-class GeminiLanguageModel(
-    base_model.BaseLanguageModel
-):  # pylint: disable=too-many-instance-attributes
+class GeminiLanguageModel(base_model.BaseLanguageModel):  # pylint: disable=too-many-instance-attributes
     """Language model inference using Google's Gemini API with structured output."""
 
     model_id: str = _DEFAULT_MODEL_ID

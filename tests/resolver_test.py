@@ -23,9 +23,9 @@ def assert_char_interval_match_source(
     """
     for extraction in extractions:
         if extraction.alignment_status == data.AlignmentStatus.MATCH_EXACT:
-            assert (
-                extraction.char_interval is not None
-            ), "char_interval should not be None for AlignmentStatus.MATCH_EXACT"
+            assert extraction.char_interval is not None, (
+                "char_interval should not be None for AlignmentStatus.MATCH_EXACT"
+            )
 
             char_int = extraction.char_interval
             start = char_int.start_pos

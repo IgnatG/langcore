@@ -130,19 +130,27 @@ class BatchConfig:
         return cfg
 
 
-_TERMINAL_FAIL = frozenset(
-    {
-        genai.types.JobState.JOB_STATE_FAILED,
-        genai.types.JobState.JOB_STATE_CANCELLED,
-        genai.types.JobState.JOB_STATE_EXPIRED,
-    }
-)
-_TERMINAL_OK = frozenset(
-    {
-        genai.types.JobState.JOB_STATE_SUCCEEDED,
-        genai.types.JobState.JOB_STATE_PAUSED,
-    }
-)
+def _terminal_fail() -> frozenset:
+    """Lazily build the set of terminal-failure job states (requires google-genai)."""
+    _check_google_deps()
+    return frozenset(
+        {
+            genai.types.JobState.JOB_STATE_FAILED,
+            genai.types.JobState.JOB_STATE_CANCELLED,
+            genai.types.JobState.JOB_STATE_EXPIRED,
+        }
+    )
+
+
+def _terminal_ok() -> frozenset:
+    """Lazily build the set of terminal-success job states (requires google-genai)."""
+    _check_google_deps()
+    return frozenset(
+        {
+            genai.types.JobState.JOB_STATE_SUCCEEDED,
+            genai.types.JobState.JOB_STATE_PAUSED,
+        }
+    )
 
 
 def _default_job_create_callback(job: Any) -> None:
@@ -565,10 +573,10 @@ def _poll_completion(
         job = client.batches.get(name=name)
         state = job.state
 
-        if state in _TERMINAL_OK:
+        if state in _terminal_ok():
             return job
 
-        if state in _TERMINAL_FAIL:
+        if state in _terminal_fail():
             error_details = job.error or "(no error details)"
             raise exceptions.InferenceRuntimeError(
                 f"Batch job failed: state={state.name}, name={name}, "
