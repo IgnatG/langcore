@@ -28,6 +28,10 @@ from langcore.core import base_model, data
 from langcore.core import format_handler as fh
 from langcore.core import tokenizer as tokenizer_lib
 
+# Sentinel to distinguish "user didn't pass schema_validation_retries"
+# from "user explicitly passed 0".
+_UNSET: typing.Final = object()
+
 
 def _build_extraction_components(
     text_or_documents: typing.Any,
@@ -243,6 +247,22 @@ def _compute_reliability(
     reliability_mod.compute_reliability_scores(result, schema=schema, config=cfg)
 
 
+def _resolve_retry_count(
+    schema_validation_retries: int | object,
+    schema: type[pydantic.BaseModel] | None,
+) -> int:
+    """Resolve the effective number of schema validation retries.
+
+    When the caller did not explicitly pass ``schema_validation_retries``
+    (the sentinel ``_UNSET`` is used), retries default to **1** when a
+    ``schema`` is provided and **0** otherwise.  An explicit ``0``
+    disables retries even when a schema is given.
+    """
+    if schema_validation_retries is _UNSET:
+        return 1 if schema is not None else 0
+    return int(schema_validation_retries)  # type: ignore[arg-type]
+
+
 def extract(
     text_or_documents: typing.Any,
     prompt_description: str | None = None,
@@ -274,7 +294,7 @@ def extract(
     tokenizer: tokenizer_lib.Tokenizer | None = None,
     hooks: hooks_lib.Hooks | None = None,
     optimized_config: typing.Any = None,
-    schema_validation_retries: int = 0,
+    schema_validation_retries: int | typing.Any = _UNSET,
     reliability_config: reliability_mod.ReliabilityConfig | bool = True,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Extracts structured information from text.
@@ -383,10 +403,12 @@ def extract(
           ``prompt_description`` and ``examples`` override the
           corresponding parameters.
         schema_validation_retries: Number of retry attempts when Pydantic
-          schema validation fails (Instructor pattern). Only effective when
-          ``schema`` is provided and the input is a string. Each retry
-          re-prompts the LLM with validation error feedback. Defaults to 0
-          (disabled). Set to 1 or higher to enable.
+          schema validation fails (Instructor-style validate → re-ask
+          pattern). When a ``schema`` is provided and this parameter is
+          not explicitly set, it defaults to **1** (one automatic retry).
+          Set to ``0`` to disable retries even when a schema is given.
+          Each retry re-prompts the LLM with the specific Pydantic
+          validation errors so the model can correct them.
         reliability_config: Controls composite reliability scoring.
           When ``True`` (default), reliability scores are computed using
           default ``ReliabilityConfig`` weights.  Pass a
@@ -461,6 +483,8 @@ def extract(
             },
         )
 
+        effective_retries = _resolve_retry_count(schema_validation_retries, schema)
+
         if isinstance(text_or_documents, str):
             result = annotator.annotate_text(
                 text=text_or_documents,
@@ -476,7 +500,7 @@ def extract(
                 tokenizer=tokenizer,
                 **alignment_kwargs,
             )
-            if schema is not None and schema_validation_retries > 0:
+            if schema is not None and effective_retries > 0:
                 result = _pydantic_validation.pydantic_retry(
                     result,
                     schema,
@@ -493,7 +517,7 @@ def extract(
                     tokenizer=tokenizer,
                     alignment_kwargs=alignment_kwargs,
                     hooks=_hooks,
-                    max_retries=schema_validation_retries,
+                    max_retries=effective_retries,
                 )
             _compute_reliability(
                 result, schema=schema, reliability_config=reliability_config
@@ -516,6 +540,27 @@ def extract(
                 **alignment_kwargs,
             )
             result_list = list(result)
+            if schema is not None and effective_retries > 0:
+                for i, doc in enumerate(result_list):
+                    if doc.text is not None:
+                        result_list[i] = _pydantic_validation.pydantic_retry(
+                            doc,
+                            schema,
+                            annotator,
+                            res,
+                            max_char_buffer=max_char_buffer,
+                            batch_length=batch_length,
+                            additional_context=additional_context,
+                            debug=debug,
+                            extraction_passes=extraction_passes,
+                            context_window_chars=context_window_chars,
+                            show_progress=show_progress,
+                            max_workers=max_workers,
+                            tokenizer=tokenizer,
+                            alignment_kwargs=alignment_kwargs,
+                            hooks=_hooks,
+                            max_retries=effective_retries,
+                        )
             for doc in result_list:
                 _compute_reliability(
                     doc, schema=schema, reliability_config=reliability_config
@@ -558,7 +603,7 @@ async def async_extract(
     tokenizer: tokenizer_lib.Tokenizer | None = None,
     hooks: hooks_lib.Hooks | None = None,
     optimized_config: typing.Any = None,
-    schema_validation_retries: int = 0,
+    schema_validation_retries: int | typing.Any = _UNSET,
     reliability_config: reliability_mod.ReliabilityConfig | bool = True,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Async version of ``extract`` for non-blocking LLM inference.
@@ -612,7 +657,10 @@ async def async_extract(
         retry attempts.  Only applies when ``schema`` is provided.
         After extraction, each result is validated against the schema;
         failures trigger a re-extraction with validation feedback.
-        Defaults to ``0`` (no validation retries).
+        **Auto-enabled**: defaults to ``1`` when ``schema`` is provided
+        and this parameter is not explicitly set; defaults to ``0``
+        when no schema is provided.  Pass ``0`` explicitly to disable
+        retries even when a schema is present.
       reliability_config: Controls composite reliability scoring.
         When ``True`` (default), reliability scores are computed using
         default ``ReliabilityConfig`` weights.  Pass a
@@ -679,6 +727,8 @@ async def async_extract(
             },
         )
 
+        effective_retries = _resolve_retry_count(schema_validation_retries, schema)
+
         if isinstance(text_or_documents, str):
             result = await annotator.async_annotate_text(
                 text=text_or_documents,
@@ -694,7 +744,7 @@ async def async_extract(
                 tokenizer=tokenizer,
                 **alignment_kwargs,
             )
-            if schema is not None and schema_validation_retries > 0:
+            if schema is not None and effective_retries > 0:
                 result = await _pydantic_validation.async_pydantic_retry(
                     result,
                     schema,
@@ -711,7 +761,7 @@ async def async_extract(
                     tokenizer=tokenizer,
                     alignment_kwargs=alignment_kwargs,
                     hooks=_hooks,
-                    max_retries=schema_validation_retries,
+                    max_retries=effective_retries,
                 )
             _compute_reliability(
                 result, schema=schema, reliability_config=reliability_config
@@ -733,12 +783,36 @@ async def async_extract(
                 tokenizer=tokenizer,
                 **alignment_kwargs,
             )
-            for doc in result:
+            result_list = list(result)
+            if schema is not None and effective_retries > 0:
+                for i, doc in enumerate(result_list):
+                    if doc.text is not None:
+                        result_list[
+                            i
+                        ] = await _pydantic_validation.async_pydantic_retry(
+                            doc,
+                            schema,
+                            annotator,
+                            res,
+                            max_char_buffer=max_char_buffer,
+                            batch_length=batch_length,
+                            additional_context=additional_context,
+                            debug=debug,
+                            extraction_passes=extraction_passes,
+                            context_window_chars=context_window_chars,
+                            show_progress=show_progress,
+                            max_workers=max_workers,
+                            tokenizer=tokenizer,
+                            alignment_kwargs=alignment_kwargs,
+                            hooks=_hooks,
+                            max_retries=effective_retries,
+                        )
+            for doc in result_list:
                 _compute_reliability(
                     doc, schema=schema, reliability_config=reliability_config
                 )
-            await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
-            return result
+            await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result_list)
+            return result_list
     except Exception as exc:
         await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_ERROR, exc)
         raise

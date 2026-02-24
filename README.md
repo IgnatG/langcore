@@ -36,6 +36,7 @@ LangCore extends Google's LangCore with the following features:
 | Feature | Description |
 |---|---|
 | **Pydantic Schema Extraction** | Define extraction targets as Pydantic models with auto-generated prompts and JSON schema constraints (`schema_adapter`, `schema_generator`) |
+| **Schema Validation Retry** | Auto-enabled Pydantic validate → re-ask loop: validates extractions against the schema and retries invalid ones with error feedback (configurable via `schema_validation_retries`) |
 | **Confidence Scoring** | Per-extraction confidence (0.0–1.0) combining alignment quality + token overlap, with configurable weights |
 | **Extraction Reliability Score** | Composite quality metric (0.0–1.0) combining confidence, schema validity, field completeness, and source grounding — configurable via `ReliabilityConfig` |
 | **Extraction Hooks & Events** | 6 lifecycle events (`extraction:start`, `chunk`, `llm_call`, `alignment`, `complete`, `error`) with fault-tolerant callbacks |
@@ -75,7 +76,7 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | Feature | LangCore | LangStruct | Instructor | Guardrails AI |
 |---|---|---|---|---|
 | **Pydantic schema extraction** | ✅ `schema=MyModel` with auto-prompt generation | ✅ Native | ✅ Native response model | ⚠️ Via Pydantic integration |
-| **Schema validation retry** | ✅ `schema_validation_retries=N` — validate → re-ask loop | ❌ | ✅ Auto retry on Pydantic failure | ⚠️ Via Guard wrapping |
+| **Schema validation retry** | ✅ Auto-enabled validate → re-ask loop with `schema_validation_retries` | ❌ | ✅ Auto retry on Pydantic failure | ⚠️ Via Guard wrapping |
 | **Few-shot examples** | ✅ `ExampleData` with text + extractions | ⚠️ Limited | ❌ | ❌ |
 | **Pydantic ↔ ExampleData bridge** | ✅ `to_pydantic()` / `schema_from_pydantic()` | ❌ | N/A | N/A |
 | **Schema from dict** | ✅ `schema_from_example({"key": "val"})` | ❌ | ❌ | ❌ |
@@ -353,18 +354,38 @@ result = lx.extract(
 
 #### Schema Validation Retries
 
-When using Pydantic schema mode, you can enable automatic validation retries with `schema_validation_retries`. After extraction, each result is validated against the schema. Extractions that fail validation trigger a re-extraction with the validation error feedback, following the Instructor-style "validate → re-ask" pattern:
+When you pass a `schema`, validation retries are **auto-enabled** (1 retry by default). After extraction, each result is validated against the Pydantic model; extractions that fail trigger a re-extraction with the validation error feedback, following the Instructor-style "validate → re-ask" pattern.
 
 ```python
+# Auto-enabled — retries once automatically when schema is provided
 result = lx.extract(
     text="Invoice INV-2024-789 for $3,450 is due April 20th, 2024",
     schema=Invoice,
     model_id="gemini-2.5-flash",
-    schema_validation_retries=2,  # Up to 2 retry attempts
 )
 ```
 
-Valid extractions from the first pass are always preserved — only invalid ones are retried. The correction prompt includes the specific Pydantic validation errors so the LLM can fix them.
+You can increase or decrease the retry count, or disable retries entirely:
+
+```python
+# Allow up to 3 retry attempts
+result = lx.extract(text="...", schema=Invoice, schema_validation_retries=3)
+
+# Explicitly disable retries (schema extraction only, no validation)
+result = lx.extract(text="...", schema=Invoice, schema_validation_retries=0)
+```
+
+**How it works:**
+
+1. Valid extractions from the first pass are always preserved.
+2. Invalid extractions are collected with their Pydantic validation errors.
+3. A correction prompt containing the specific error messages is appended.
+4. The LLM re-extracts, and newly valid results are merged in.
+5. Steps 2–4 repeat up to `schema_validation_retries` times.
+
+Retries also work for **Document list** inputs — each document is validated and retried independently.
+
+When `schema` is not provided, `schema_validation_retries` defaults to 0 (no-op).
 
 ### Confidence Scoring
 

@@ -1,4 +1,4 @@
-"""Tests for langcore._pydantic_validation module."""
+"""Tests for langcore._pydantic_validation module and retry wiring."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pydantic
 from absl.testing import absltest
 
 from langcore import _pydantic_validation as pv
+from langcore import extraction as extraction_mod
 from langcore import hooks as hooks_lib
 from langcore.core import data
 
@@ -412,6 +413,40 @@ class AsyncPydanticRetryTest(absltest.TestCase):
             )
         )
         self.assertLen(result.extractions, 2)
+
+
+# ── _resolve_retry_count tests ───────────────────────────────────
+class ResolveRetryCountTest(absltest.TestCase):
+    """Tests for the _resolve_retry_count helper."""
+
+    def test_unset_with_schema_returns_one(self):
+        """When not explicitly set and schema provided, default to 1."""
+        result = extraction_mod._resolve_retry_count(extraction_mod._UNSET, _Person)
+        self.assertEqual(result, 1)
+
+    def test_unset_without_schema_returns_zero(self):
+        """When not explicitly set and no schema, default to 0."""
+        result = extraction_mod._resolve_retry_count(extraction_mod._UNSET, None)
+        self.assertEqual(result, 0)
+
+    def test_explicit_zero_with_schema_returns_zero(self):
+        """Explicit 0 disables retries even with schema."""
+        result = extraction_mod._resolve_retry_count(0, _Person)
+        self.assertEqual(result, 0)
+
+    def test_explicit_value_passed_through(self):
+        """Explicit positive int is returned as-is."""
+        result = extraction_mod._resolve_retry_count(3, _Person)
+        self.assertEqual(result, 3)
+
+    def test_explicit_zero_without_schema(self):
+        result = extraction_mod._resolve_retry_count(0, None)
+        self.assertEqual(result, 0)
+
+    def test_explicit_value_without_schema(self):
+        """Explicit value is honoured even without schema."""
+        result = extraction_mod._resolve_retry_count(2, None)
+        self.assertEqual(result, 2)
 
 
 if __name__ == "__main__":
