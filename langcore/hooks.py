@@ -56,6 +56,15 @@ class HookName(enum.Enum):
             Receives the ``AnnotatedDocument`` (or list thereof).
         EXTRACTION_ERROR: Fired on any error during extraction.
             Receives the ``Exception`` instance.
+        VALIDATION_RETRY_START: Fired before a Pydantic validation
+            retry attempt begins.  Receives a dict with ``attempt``
+            (1-based), ``max_retries``, ``valid_count``,
+            ``invalid_count``, and ``regions`` (list of
+            ``(start, end)`` tuples).
+        VALIDATION_RETRY_COMPLETE: Fired after a retry attempt
+            finishes.  Receives a dict with ``attempt``,
+            ``retry_valid_count``, ``still_invalid_count``, and
+            ``total_extractions``.
     """
 
     EXTRACTION_START = "extraction:start"
@@ -64,6 +73,8 @@ class HookName(enum.Enum):
     EXTRACTION_ALIGNMENT = "extraction:alignment"
     EXTRACTION_COMPLETE = "extraction:complete"
     EXTRACTION_ERROR = "extraction:error"
+    VALIDATION_RETRY_START = "validation:retry_start"
+    VALIDATION_RETRY_COMPLETE = "validation:retry_complete"
 
 
 # Allow both enum values and raw strings as hook names.

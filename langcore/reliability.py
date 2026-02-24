@@ -56,14 +56,25 @@ def _schema_validity_score(
     extraction: data.Extraction,
     schema: type[pydantic.BaseModel] | None,
     primary_field: str | None,
+    *,
+    _validity_cache: dict[int, float] | None = None,
 ) -> float:
     """Return 1.0 if the extraction validates against *schema*, else 0.0.
 
     When *schema* is ``None`` the signal is neutral (1.0) so it does
     not penalise extractions that were not schema-driven.
+
+    Parameters:
+        _validity_cache: Optional ``{id(extraction): score}`` cache.
+            When provided, results are stored/retrieved to avoid
+            redundant ``model_validate`` calls.
     """
     if schema is None:
         return 1.0
+
+    ext_id = id(extraction)
+    if _validity_cache is not None and ext_id in _validity_cache:
+        return _validity_cache[ext_id]
 
     model_name = schema.__name__
     if (
@@ -71,7 +82,10 @@ def _schema_validity_score(
         and extraction.extraction_class.lower() != model_name.lower()
     ):
         # Not the right class — treat as neutral rather than penalising
-        return 1.0
+        score = 1.0
+        if _validity_cache is not None:
+            _validity_cache[ext_id] = score
+        return score
 
     field_data: dict[str, Any] = {}
     if primary_field is not None:
@@ -83,27 +97,40 @@ def _schema_validity_score(
 
     try:
         schema.model_validate(field_data)
-        return 1.0
+        score = 1.0
     except pydantic.ValidationError:
-        return 0.0
+        score = 0.0
+
+    if _validity_cache is not None:
+        _validity_cache[ext_id] = score
+    return score
 
 
 def _field_completeness_score(
     extraction: data.Extraction,
     schema: type[pydantic.BaseModel] | None,
     primary_field: str | None,
+    *,
+    required_fields: list[str] | None = None,
 ) -> float:
     """Ratio of non-empty required fields to total required fields.
 
     Returns 1.0 when no schema is provided (neutral).
+
+    Parameters:
+        required_fields: Pre-computed list of required field names.
+            When provided, avoids re-introspecting the schema for
+            every extraction (batch optimisation).
     """
     if schema is None:
         return 1.0
 
-    required_fields: list[str] = []
-    for name, field_info in schema.model_fields.items():
-        if field_info.is_required():
-            required_fields.append(name)
+    if required_fields is None:
+        required_fields = [
+            name
+            for name, field_info in schema.model_fields.items()
+            if field_info.is_required()
+        ]
 
     if not required_fields:
         return 1.0
@@ -151,6 +178,9 @@ def compute_reliability_score(
     schema: type[pydantic.BaseModel] | None = None,
     primary_field: str | None = None,
     config: ReliabilityConfig | None = None,
+    pre_validated: bool | None = None,
+    required_fields: list[str] | None = None,
+    _validity_cache: dict[int, float] | None = None,
 ) -> float:
     """Compute the composite reliability score for a single extraction.
 
@@ -163,6 +193,15 @@ def compute_reliability_score(
             when *schema* is provided; otherwise ignored.
         config: Weight configuration.  Uses default weights when
             ``None``.
+        pre_validated: When ``True``, the extraction is assumed to
+            have already passed Pydantic validation and the schema
+            validity signal is set to 1.0 without calling
+            ``model_validate``.  When ``None`` (default), validation
+            is performed normally.
+        required_fields: Pre-computed list of required field names
+            for the schema (batch optimisation).
+        _validity_cache: Internal per-batch cache mapping
+            ``id(extraction)`` → validity score.
 
     Returns:
         A float in ``[0.0, 1.0]``.
@@ -175,10 +214,17 @@ def compute_reliability_score(
     )
 
     # 2. Schema validity signal
-    schema_valid = _schema_validity_score(extraction, schema, primary_field)
+    if pre_validated is True:
+        schema_valid = 1.0
+    else:
+        schema_valid = _schema_validity_score(
+            extraction, schema, primary_field, _validity_cache=_validity_cache
+        )
 
     # 3. Field completeness signal
-    completeness = _field_completeness_score(extraction, schema, primary_field)
+    completeness = _field_completeness_score(
+        extraction, schema, primary_field, required_fields=required_fields
+    )
 
     # 4. Source-grounding signal
     grounding = _grounding_score(extraction)
@@ -205,24 +251,44 @@ def compute_reliability_scores(
     *,
     schema: type[pydantic.BaseModel] | None = None,
     config: ReliabilityConfig | None = None,
+    pre_validated: bool | None = None,
 ) -> None:
     """Compute and set ``reliability_score`` on every extraction in *result*.
 
     Mutates each ``Extraction`` in *result.extractions* in-place.
 
+    Pre-computes the required-field list once for the batch and
+    maintains a per-batch validation cache so that
+    ``model_validate`` is called at most once per extraction.
+
     Parameters:
         result: The annotated document to score.
         schema: Optional Pydantic schema for validity / completeness signals.
         config: Weight configuration.
+        pre_validated: When ``True``, all extractions are assumed to
+            have already passed Pydantic validation.  The schema
+            validity signal is set to 1.0 for every extraction
+            without calling ``model_validate``.  Use this when
+            ``pydantic_retry`` has already validated the result.
     """
     if not result.extractions:
         return
 
     primary_field: str | None = None
+    required_fields: list[str] | None = None
     if schema is not None:
         from langcore.core.schema_utils import find_primary_text_field
 
         primary_field = find_primary_text_field(schema)
+        required_fields = [
+            name
+            for name, field_info in schema.model_fields.items()
+            if field_info.is_required()
+        ]
+
+    # Per-batch cache: avoids duplicate model_validate calls for the
+    # same extraction object.
+    validity_cache: dict[int, float] = {}
 
     for extraction in result.extractions:
         extraction.reliability_score = compute_reliability_score(
@@ -230,4 +296,7 @@ def compute_reliability_scores(
             schema=schema,
             primary_field=primary_field,
             config=config,
+            pre_validated=pre_validated,
+            required_fields=required_fields,
+            _validity_cache=validity_cache,
         )

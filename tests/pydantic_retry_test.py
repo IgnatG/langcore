@@ -861,5 +861,170 @@ class AsyncChunkLevelRetryTest(absltest.TestCase):
         self.assertEqual(result.document_id, "original-id")
 
 
+# ── 5.5: Hook emission tests ────────────────────────────────────
+
+
+class RetryHooksTest(absltest.TestCase):
+    """Tests for VALIDATION_RETRY_START/COMPLETE hook emissions."""
+
+    def _make_retry_kwargs(self, annotator, resolver):
+        return {
+            "annotator": annotator,
+            "res": resolver,
+            "max_char_buffer": 1000,
+            "batch_length": 500,
+            "additional_context": None,
+            "debug": False,
+            "extraction_passes": 1,
+            "context_window_chars": None,
+            "show_progress": False,
+            "max_workers": 1,
+            "tokenizer": None,
+            "alignment_kwargs": {},
+            "hooks": hooks_lib.Hooks(),
+            "max_retries": 1,
+        }
+
+    def test_hooks_emitted_on_retry(self):
+        """VALIDATION_RETRY_START and VALIDATION_RETRY_COMPLETE fire during retry."""
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text="x" * 100)
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(extractions=[corrected_ext], text="region")
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        hooks = hooks_lib.Hooks()
+        events: list[tuple[str, dict]] = []
+        hooks.on(
+            hooks_lib.HookName.VALIDATION_RETRY_START,
+            lambda payload: events.append(("start", payload)),
+        )
+        hooks.on(
+            hooks_lib.HookName.VALIDATION_RETRY_COMPLETE,
+            lambda payload: events.append(("complete", payload)),
+        )
+
+        kwargs = self._make_retry_kwargs(annotator, resolver)
+        kwargs["hooks"] = hooks
+
+        pv.pydantic_retry(doc, _Person, **kwargs)
+
+        self.assertLen(events, 2)
+        self.assertEqual(events[0][0], "start")
+        self.assertEqual(events[0][1]["attempt"], 1)
+        self.assertEqual(events[0][1]["invalid_count"], 1)
+        self.assertIn("regions", events[0][1])
+
+        self.assertEqual(events[1][0], "complete")
+        self.assertEqual(events[1][1]["attempt"], 1)
+        self.assertIn("retry_valid_count", events[1][1])
+        self.assertIn("total_extractions", events[1][1])
+
+    def test_no_hooks_when_all_valid(self):
+        """No retry hooks fire when all extractions are valid."""
+        good_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(extractions=[good_ext], text="x" * 100)
+
+        annotator = mock.MagicMock()
+        resolver = mock.MagicMock()
+
+        hooks = hooks_lib.Hooks()
+        events: list = []
+        hooks.on(
+            hooks_lib.HookName.VALIDATION_RETRY_START,
+            lambda p: events.append(p),
+        )
+
+        kwargs = self._make_retry_kwargs(annotator, resolver)
+        kwargs["hooks"] = hooks
+
+        pv.pydantic_retry(doc, _Person, **kwargs)
+
+        self.assertEmpty(events)
+
+    def test_async_hooks_emitted_on_retry(self):
+        """Async retry also emits hooks."""
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text="x" * 100)
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(extractions=[corrected_ext], text="region")
+
+        annotator = mock.MagicMock()
+        annotator.async_annotate_text = mock.AsyncMock(return_value=retry_doc)
+        resolver = mock.MagicMock()
+
+        hooks = hooks_lib.Hooks()
+        events: list[tuple[str, dict]] = []
+        hooks.on(
+            hooks_lib.HookName.VALIDATION_RETRY_START,
+            lambda payload: events.append(("start", payload)),
+        )
+        hooks.on(
+            hooks_lib.HookName.VALIDATION_RETRY_COMPLETE,
+            lambda payload: events.append(("complete", payload)),
+        )
+
+        kwargs = self._make_retry_kwargs(annotator, resolver)
+        kwargs["hooks"] = hooks
+
+        asyncio.run(pv.async_pydantic_retry(doc, _Person, **kwargs))
+
+        self.assertLen(events, 2)
+        self.assertEqual(events[0][0], "start")
+        self.assertEqual(events[1][0], "complete")
+
+    def test_hook_payload_contains_regions(self):
+        """The retry_start payload includes the text regions being retried."""
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=50, end=60
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text="x" * 500)
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(extractions=[corrected_ext], text="region")
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        hooks = hooks_lib.Hooks()
+        payloads: list[dict] = []
+        hooks.on(
+            hooks_lib.HookName.VALIDATION_RETRY_START,
+            lambda p: payloads.append(p),
+        )
+
+        kwargs = self._make_retry_kwargs(annotator, resolver)
+        kwargs["hooks"] = hooks
+
+        pv.pydantic_retry(doc, _Person, **kwargs)
+
+        self.assertLen(payloads, 1)
+        regions = payloads[0]["regions"]
+        self.assertIsInstance(regions, list)
+        self.assertGreater(len(regions), 0)
+        # Each region is a (start, end) tuple
+        start, end = regions[0]
+        self.assertGreaterEqual(start, 0)
+        self.assertGreater(end, start)
+
+
 if __name__ == "__main__":
     absltest.main()

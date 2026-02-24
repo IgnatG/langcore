@@ -236,8 +236,16 @@ def _compute_reliability(
     *,
     schema: type[pydantic.BaseModel] | None,
     reliability_config: reliability_mod.ReliabilityConfig | bool,
+    pre_validated: bool | None = None,
 ) -> None:
-    """Compute reliability scores on *result* if configured."""
+    """Compute reliability scores on *result* if configured.
+
+    Parameters:
+        pre_validated: When ``True``, the schema validity signal is
+            assumed 1.0 for every extraction (skips redundant
+            ``model_validate`` calls).  Set automatically when
+            ``pydantic_retry`` has already validated the result.
+    """
     if reliability_config is False:
         return
     cfg = (
@@ -245,7 +253,9 @@ def _compute_reliability(
         if isinstance(reliability_config, reliability_mod.ReliabilityConfig)
         else None
     )
-    reliability_mod.compute_reliability_scores(result, schema=schema, config=cfg)
+    reliability_mod.compute_reliability_scores(
+        result, schema=schema, config=cfg, pre_validated=pre_validated
+    )
 
 
 def _resolve_retry_count(
@@ -595,6 +605,7 @@ def extract(
                         doc_result,
                         schema=schema,
                         reliability_config=reliability_config,
+                        pre_validated=schema is not None and effective_retries > 0,
                     )
                 _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, doc_results)
                 return doc_results
@@ -627,7 +638,10 @@ def extract(
                     max_retries=effective_retries,
                 )
             _compute_reliability(
-                result, schema=schema, reliability_config=reliability_config
+                result,
+                schema=schema,
+                reliability_config=reliability_config,
+                pre_validated=schema is not None and effective_retries > 0,
             )
             _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
@@ -668,7 +682,10 @@ def extract(
                     max_retries=effective_retries,
                 )
             _compute_reliability(
-                result, schema=schema, reliability_config=reliability_config
+                result,
+                schema=schema,
+                reliability_config=reliability_config,
+                pre_validated=schema is not None and effective_retries > 0,
             )
             _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
@@ -711,7 +728,10 @@ def extract(
                         )
             for doc in result_list:
                 _compute_reliability(
-                    doc, schema=schema, reliability_config=reliability_config
+                    doc,
+                    schema=schema,
+                    reliability_config=reliability_config,
+                    pre_validated=schema is not None and effective_retries > 0,
                 )
             _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result_list)
             return result_list
@@ -961,6 +981,7 @@ async def async_extract(
                         doc_result,
                         schema=schema,
                         reliability_config=reliability_config,
+                        pre_validated=schema is not None and effective_retries > 0,
                     )
                 await _hooks.async_emit(
                     hooks_lib.HookName.EXTRACTION_COMPLETE, doc_results
@@ -995,7 +1016,10 @@ async def async_extract(
                     max_retries=effective_retries,
                 )
             _compute_reliability(
-                result, schema=schema, reliability_config=reliability_config
+                result,
+                schema=schema,
+                reliability_config=reliability_config,
+                pre_validated=schema is not None and effective_retries > 0,
             )
             await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
@@ -1036,7 +1060,10 @@ async def async_extract(
                     max_retries=effective_retries,
                 )
             _compute_reliability(
-                result, schema=schema, reliability_config=reliability_config
+                result,
+                schema=schema,
+                reliability_config=reliability_config,
+                pre_validated=schema is not None and effective_retries > 0,
             )
             await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
@@ -1081,7 +1108,10 @@ async def async_extract(
                         )
             for doc in result_list:
                 _compute_reliability(
-                    doc, schema=schema, reliability_config=reliability_config
+                    doc,
+                    schema=schema,
+                    reliability_config=reliability_config,
+                    pre_validated=schema is not None and effective_retries > 0,
                 )
             await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result_list)
             return result_list

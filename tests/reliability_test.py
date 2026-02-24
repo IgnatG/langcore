@@ -411,5 +411,233 @@ class ReliabilityScoreFieldTest(absltest.TestCase):
         self.assertAlmostEqual(ext.reliability_score, 0.42)
 
 
+# ── 3.1: Validation cache tests ─────────────────────────────────
+
+
+class ValidationCacheTest(absltest.TestCase):
+    """Tests for _validity_cache in _schema_validity_score and batch scoring."""
+
+    def test_cache_avoids_duplicate_model_validate_calls(self):
+        """Same extraction scored twice reuses cached result."""
+        from unittest import mock
+
+        ext = _make_extraction(
+            text="test",
+            cls="Invoice",
+            confidence=0.9,
+            char_start=0,
+            char_end=4,
+            attributes={"amount": 42.0},
+        )
+
+        cache: dict[int, float] = {}
+        with mock.patch.object(
+            Invoice, "model_validate", wraps=Invoice.model_validate
+        ) as mock_validate:
+            from langcore.reliability import _schema_validity_score
+
+            score1 = _schema_validity_score(ext, Invoice, "text", _validity_cache=cache)
+            score2 = _schema_validity_score(ext, Invoice, "text", _validity_cache=cache)
+
+            self.assertAlmostEqual(score1, score2)
+            # model_validate should only be called once (cached second time)
+            mock_validate.assert_called_once()
+
+    def test_cache_stores_invalid_result_too(self):
+        ext = _make_extraction(
+            text="test",
+            cls="Person",
+            confidence=0.9,
+            attributes={"age": "not-a-number"},
+        )
+        cache: dict[int, float] = {}
+        from langcore.reliability import _schema_validity_score
+
+        score = _schema_validity_score(ext, Person, "name", _validity_cache=cache)
+        self.assertAlmostEqual(score, 0.0)
+        self.assertIn(id(ext), cache)
+
+    def test_batch_scoring_uses_cache_internally(self):
+        """compute_reliability_scores builds a per-batch cache."""
+        from unittest import mock
+
+        ext1 = _make_extraction(
+            text="inv-1",
+            cls="Invoice",
+            confidence=0.9,
+            char_start=0,
+            char_end=5,
+            attributes={"amount": 10.0},
+        )
+        ext2 = _make_extraction(
+            text="inv-2",
+            cls="Invoice",
+            confidence=0.8,
+            char_start=10,
+            char_end=15,
+            attributes={"amount": 20.0},
+        )
+        doc = data.AnnotatedDocument(extractions=[ext1, ext2])
+
+        with mock.patch.object(
+            Invoice, "model_validate", wraps=Invoice.model_validate
+        ) as mock_validate:
+            compute_reliability_scores(doc, schema=Invoice)
+            # Each distinct extraction should be validated exactly once
+            self.assertEqual(mock_validate.call_count, 2)
+
+
+# ── 3.2: Pre-computed required fields tests ──────────────────────
+
+
+class PreComputedRequiredFieldsTest(absltest.TestCase):
+    """Tests for required_fields pre-computation in batch scorer."""
+
+    def test_required_fields_parameter_used(self):
+        """Explicit required_fields avoid re-introspecting schema."""
+        ext = _make_extraction(
+            text="Alice",
+            cls="Person",
+            confidence=0.9,
+            char_start=0,
+            char_end=5,
+            attributes={"age": 30},
+        )
+        # Person has name (required) and age (required)
+        score_with = compute_reliability_score(
+            ext,
+            schema=Person,
+            primary_field="name",
+            required_fields=["name", "age"],
+        )
+        score_without = compute_reliability_score(
+            ext,
+            schema=Person,
+            primary_field="name",
+        )
+        self.assertAlmostEqual(score_with, score_without)
+
+    def test_empty_required_fields_gives_full_completeness(self):
+        """When required_fields=[] is passed, completeness is 1.0."""
+        ext = _make_extraction(
+            text="test", cls="Invoice", confidence=0.9, char_start=0, char_end=4
+        )
+        from langcore.reliability import _field_completeness_score
+
+        score = _field_completeness_score(ext, Invoice, "text", required_fields=[])
+        self.assertAlmostEqual(score, 1.0)
+
+
+# ── P3: pre_validated skip re-validation tests ───────────────────
+
+
+class PreValidatedTest(absltest.TestCase):
+    """Tests for pre_validated parameter in reliability scoring."""
+
+    def test_pre_validated_skips_model_validate(self):
+        """With pre_validated=True, model_validate is never called."""
+        from unittest import mock
+
+        ext = _make_extraction(
+            text="test",
+            cls="Invoice",
+            confidence=0.9,
+            char_start=0,
+            char_end=4,
+            attributes={"amount": 42.0},
+        )
+        with mock.patch.object(Invoice, "model_validate") as mock_validate:
+            score = compute_reliability_score(
+                ext,
+                schema=Invoice,
+                primary_field="text",
+                pre_validated=True,
+            )
+            mock_validate.assert_not_called()
+        # Schema validity signal should be 1.0 → overall score should be higher
+        self.assertGreater(score, 0.0)
+
+    def test_pre_validated_false_still_validates(self):
+        """With pre_validated=None, model_validate IS called."""
+        from unittest import mock
+
+        ext = _make_extraction(
+            text="test",
+            cls="Invoice",
+            confidence=0.9,
+            char_start=0,
+            char_end=4,
+            attributes={"amount": 42.0},
+        )
+        with mock.patch.object(
+            Invoice, "model_validate", wraps=Invoice.model_validate
+        ) as mock_validate:
+            compute_reliability_score(
+                ext,
+                schema=Invoice,
+                primary_field="text",
+            )
+            mock_validate.assert_called_once()
+
+    def test_batch_pre_validated_skips_all(self):
+        """compute_reliability_scores with pre_validated=True skips all validation."""
+        from unittest import mock
+
+        ext1 = _make_extraction(
+            text="test1",
+            cls="Invoice",
+            confidence=0.9,
+            char_start=0,
+            char_end=5,
+            attributes={"amount": 10.0},
+        )
+        ext2 = _make_extraction(
+            text="test2",
+            cls="Invoice",
+            confidence=0.8,
+            char_start=10,
+            char_end=15,
+            attributes={"amount": 20.0},
+        )
+        doc = data.AnnotatedDocument(extractions=[ext1, ext2])
+
+        with mock.patch.object(Invoice, "model_validate") as mock_validate:
+            compute_reliability_scores(doc, schema=Invoice, pre_validated=True)
+            mock_validate.assert_not_called()
+
+        # Both extractions should still get reliability scores
+        self.assertIsNotNone(ext1.reliability_score)
+        self.assertIsNotNone(ext2.reliability_score)
+
+    def test_pre_validated_gives_higher_score_for_invalid(self):
+        """An extraction that would fail validation gets 1.0 validity with pre_validated."""
+        ext = _make_extraction(
+            text="test",
+            cls="Invoice",
+            confidence=0.9,
+            char_start=0,
+            char_end=4,
+            attributes={"amount": "not-a-number"},  # would fail
+        )
+        cfg = ReliabilityConfig(
+            w_confidence=0, w_schema_valid=1.0, w_completeness=0, w_grounding=0
+        )
+        score_pre = compute_reliability_score(
+            ext,
+            schema=Invoice,
+            primary_field="text",
+            config=cfg,
+            pre_validated=True,
+        )
+        score_normal = compute_reliability_score(
+            ext,
+            schema=Invoice,
+            primary_field="text",
+            config=cfg,
+        )
+        self.assertAlmostEqual(score_pre, 1.0)
+        self.assertAlmostEqual(score_normal, 0.0)
+
+
 if __name__ == "__main__":
     absltest.main()

@@ -27,6 +27,7 @@ import pydantic
 
 from langcore.core import data
 from langcore.core.schema_utils import find_primary_text_field
+from langcore.hooks import HookName
 
 if TYPE_CHECKING:
     from langcore import annotation as annotation_mod
@@ -308,6 +309,17 @@ def pydantic_retry(
         # ── Chunk-level retry: only re-extract failing regions ────
         regions = _build_retry_regions(invalid, result.text, max_char_buffer)
 
+        hooks.emit(
+            HookName.VALIDATION_RETRY_START,
+            {
+                "attempt": attempt + 1,
+                "max_retries": max_retries,
+                "valid_count": len(valid),
+                "invalid_count": len(invalid),
+                "regions": regions,
+            },
+        )
+
         retry_extractions: list[data.Extraction] = []
         for region_start, region_end in regions:
             region_text = result.text[region_start:region_end]
@@ -367,6 +379,16 @@ def pydantic_retry(
         )
         result.document_id = original_document_id
 
+        hooks.emit(
+            HookName.VALIDATION_RETRY_COMPLETE,
+            {
+                "attempt": attempt + 1,
+                "retry_valid_count": len(retry_valid),
+                "still_invalid_count": len(retry_invalid),
+                "total_extractions": len(merged),
+            },
+        )
+
     return result
 
 
@@ -424,6 +446,17 @@ async def async_pydantic_retry(
 
         # ── Chunk-level retry: only re-extract failing regions ────
         regions = _build_retry_regions(invalid, result.text, max_char_buffer)
+
+        await hooks.async_emit(
+            HookName.VALIDATION_RETRY_START,
+            {
+                "attempt": attempt + 1,
+                "max_retries": max_retries,
+                "valid_count": len(valid),
+                "invalid_count": len(invalid),
+                "regions": regions,
+            },
+        )
 
         retry_extractions: list[data.Extraction] = []
         for region_start, region_end in regions:
@@ -483,5 +516,15 @@ async def async_pydantic_retry(
             usage=accumulated_usage,
         )
         result.document_id = original_document_id
+
+        await hooks.async_emit(
+            HookName.VALIDATION_RETRY_COMPLETE,
+            {
+                "attempt": attempt + 1,
+                "retry_valid_count": len(retry_valid),
+                "still_invalid_count": len(retry_invalid),
+                "total_extractions": len(merged),
+            },
+        )
 
     return result
