@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-02-24)
+
+### Bug Fixes
+
+- Make gemini depdendencies optional
+  ([`2fdf577`](https://github.com/IgnatG/langcore/commit/2fdf57710baf7590efe6c60071a280679e226bbe))
+
+### Chores
+
+- Fix failing tests
+  ([`267b101`](https://github.com/IgnatG/langcore/commit/267b101df8d9c44f726e51ae71d89cdf7b641a76))
+
+
 ## v1.0.2 (2026-02-23)
 
 ### Bug Fixes
