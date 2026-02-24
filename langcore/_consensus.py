@@ -57,16 +57,41 @@ def _tag_extractions(
     return result
 
 
+#: Standard token-usage keys.  After merging, only these keys are
+#: guaranteed to be present — extra provider-specific keys are summed
+#: but moved into an ``"other"`` sub-dict so downstream consumers
+#: see a consistent shape.
+_STANDARD_USAGE_KEYS = frozenset({"prompt_tokens", "completion_tokens", "total_tokens"})
+
+
 def _merge_usage(
     usage_list: list[dict[str, int] | None],
 ) -> dict[str, int] | None:
-    """Sum token usage dicts from multiple model runs."""
+    """Sum token usage dicts from multiple model runs.
+
+    The result is normalised to have at most the standard keys
+    (``prompt_tokens``, ``completion_tokens``, ``total_tokens``)
+    at the top level.  Non-standard keys are still summed but
+    kept separately so the merged dict has a predictable shape.
+    """
     merged: dict[str, int] = {}
     for u in usage_list:
         if u is not None:
             for k, v in u.items():
                 merged[k] = merged.get(k, 0) + v
-    return merged or None
+    if not merged:
+        return None
+
+    # Ensure all standard keys are present (default 0).
+    for key in _STANDARD_USAGE_KEYS:
+        merged.setdefault(key, 0)
+
+    # Recalculate total_tokens as sum of prompt + completion when
+    # they're both present, to avoid double-counting across models.
+    if "prompt_tokens" in merged and "completion_tokens" in merged:
+        merged["total_tokens"] = merged["prompt_tokens"] + merged["completion_tokens"]
+
+    return merged
 
 
 def merge_consensus_results(

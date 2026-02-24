@@ -1026,5 +1026,121 @@ class RetryHooksTest(absltest.TestCase):
         self.assertGreater(end, start)
 
 
+# ── 5.4: Extraction count cap tests ─────────────────────────────
+
+
+class ExtractionCapTest(absltest.TestCase):
+    """Tests for _MAX_EXTRACTION_GROWTH_FACTOR safety cap."""
+
+    def _make_retry_kwargs(self, annotator, resolver):
+        return {
+            "annotator": annotator,
+            "res": resolver,
+            "max_char_buffer": 1000,
+            "batch_length": 500,
+            "additional_context": None,
+            "debug": False,
+            "extraction_passes": 1,
+            "context_window_chars": None,
+            "show_progress": False,
+            "max_workers": 1,
+            "tokenizer": None,
+            "alignment_kwargs": {},
+            "hooks": hooks_lib.Hooks(),
+            "max_retries": 1,
+        }
+
+    def test_cap_trims_excess_extractions(self):
+        """When retry produces too many extractions, cap trims them."""
+        # Start with 2 extractions, 1 invalid.
+        good_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        bad_ext = _make_extraction(
+            "_Person", "Bob", attributes={"age": "bad"}, start=50, end=60
+        )
+        doc = data.AnnotatedDocument(extractions=[good_ext, bad_ext], text="x" * 200)
+
+        # LLM retry returns 5 extractions (way more than the 1 invalid).
+        hallucinated = [
+            _make_extraction(
+                "_Person",
+                f"Person{i}",
+                attributes={"age": str(20 + i)},
+                start=0,
+                end=10,
+            )
+            for i in range(5)
+        ]
+        retry_doc = data.AnnotatedDocument(extractions=hallucinated, text="region")
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        kwargs = self._make_retry_kwargs(annotator, resolver)
+        result = pv.pydantic_retry(doc, _Person, **kwargs)
+
+        # Cap = max(2 * 2, 1) = 4.  Original had 2, retry produced 5 valid +
+        # 1 original valid = 6 total.  Should be trimmed to 4.
+        self.assertIsNotNone(result.extractions)
+        self.assertLessEqual(len(result.extractions), 4)
+
+    def test_no_cap_when_within_limit(self):
+        """Normal retry that stays within the cap is not trimmed."""
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text="x" * 100)
+
+        corrected = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(extractions=[corrected], text="region")
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        kwargs = self._make_retry_kwargs(annotator, resolver)
+        result = pv.pydantic_retry(doc, _Person, **kwargs)
+
+        # Cap = max(1 * 2, 1) = 2.  Merged = 1 (retry valid).  No trimming.
+        self.assertIsNotNone(result.extractions)
+        self.assertLessEqual(len(result.extractions), 2)
+
+    def test_async_cap_trims_excess(self):
+        """Async retry also respects the extraction cap."""
+        good_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        bad_ext = _make_extraction(
+            "_Person", "Bob", attributes={"age": "bad"}, start=50, end=60
+        )
+        doc = data.AnnotatedDocument(extractions=[good_ext, bad_ext], text="x" * 200)
+
+        hallucinated = [
+            _make_extraction(
+                "_Person",
+                f"Person{i}",
+                attributes={"age": str(20 + i)},
+                start=0,
+                end=10,
+            )
+            for i in range(5)
+        ]
+        retry_doc = data.AnnotatedDocument(extractions=hallucinated, text="region")
+
+        annotator = mock.MagicMock()
+        annotator.async_annotate_text = mock.AsyncMock(return_value=retry_doc)
+        resolver = mock.MagicMock()
+
+        kwargs = self._make_retry_kwargs(annotator, resolver)
+        result = asyncio.run(pv.async_pydantic_retry(doc, _Person, **kwargs))
+
+        self.assertIsNotNone(result.extractions)
+        self.assertLessEqual(len(result.extractions), 4)
+
+
 if __name__ == "__main__":
     absltest.main()

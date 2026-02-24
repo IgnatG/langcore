@@ -55,6 +55,12 @@ _CORRECTION_CONTEXT = (
 #: ``char_interval`` when building the retry text region.
 _RETRY_REGION_PADDING = 200
 
+#: Safety cap: if the merged extraction count exceeds this multiple of
+#: the original count, additional extractions are dropped and a warning
+#: is logged.  This prevents unbounded growth when the LLM hallucinates
+#: extra entities during correction retries.
+_MAX_EXTRACTION_GROWTH_FACTOR = 2
+
 
 # ── Validation helpers ────────────────────────────────────────────
 
@@ -372,6 +378,20 @@ def pydantic_retry(
         # to fix them again.
         still_invalid_exts = [ext for ext, _ in retry_invalid]
         merged = valid + retry_valid + still_invalid_exts
+
+        # Safety cap — prevent unbounded growth from LLM hallucination.
+        original_count = len(result.extractions) if result.extractions else 0
+        cap = max(original_count * _MAX_EXTRACTION_GROWTH_FACTOR, 1)
+        if len(merged) > cap:
+            logger.warning(
+                "Extraction count grew from %d to %d during retry "
+                "(cap=%d) — trimming excess extractions",
+                original_count,
+                len(merged),
+                cap,
+            )
+            merged = merged[:cap]
+
         result = data.AnnotatedDocument(
             extractions=merged if merged else None,
             text=result.text,
@@ -510,6 +530,20 @@ async def async_pydantic_retry(
         # to fix them again.
         still_invalid_exts = [ext for ext, _ in retry_invalid]
         merged = valid + retry_valid + still_invalid_exts
+
+        # Safety cap — prevent unbounded growth from LLM hallucination.
+        original_count = len(result.extractions) if result.extractions else 0
+        cap = max(original_count * _MAX_EXTRACTION_GROWTH_FACTOR, 1)
+        if len(merged) > cap:
+            logger.warning(
+                "Extraction count grew from %d to %d during retry "
+                "(cap=%d) — trimming excess extractions",
+                original_count,
+                len(merged),
+                cap,
+            )
+            merged = merged[:cap]
+
         result = data.AnnotatedDocument(
             extractions=merged if merged else None,
             text=result.text,

@@ -1086,25 +1086,25 @@ async def async_extract(
             if schema is not None and effective_retries > 0:
                 for i, doc in enumerate(result_list):
                     if doc.text is not None:
-                        result_list[i] = (
-                            await _pydantic_validation.async_pydantic_retry(
-                                doc,
-                                schema,
-                                annotator,
-                                res,
-                                max_char_buffer=max_char_buffer,
-                                batch_length=batch_length,
-                                additional_context=additional_context,
-                                debug=debug,
-                                extraction_passes=extraction_passes,
-                                context_window_chars=context_window_chars,
-                                show_progress=show_progress,
-                                max_workers=max_workers,
-                                tokenizer=tokenizer,
-                                alignment_kwargs=alignment_kwargs,
-                                hooks=_hooks,
-                                max_retries=effective_retries,
-                            )
+                        result_list[
+                            i
+                        ] = await _pydantic_validation.async_pydantic_retry(
+                            doc,
+                            schema,
+                            annotator,
+                            res,
+                            max_char_buffer=max_char_buffer,
+                            batch_length=batch_length,
+                            additional_context=additional_context,
+                            debug=debug,
+                            extraction_passes=extraction_passes,
+                            context_window_chars=context_window_chars,
+                            show_progress=show_progress,
+                            max_workers=max_workers,
+                            tokenizer=tokenizer,
+                            alignment_kwargs=alignment_kwargs,
+                            hooks=_hooks,
+                            max_retries=effective_retries,
                         )
             for doc in result_list:
                 _compute_reliability(

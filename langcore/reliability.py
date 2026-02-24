@@ -20,6 +20,7 @@ from typing import Any
 import pydantic
 
 from langcore.core import data
+from langcore.core.schema_utils import find_primary_text_field
 
 __all__ = [
     "ReliabilityConfig",
@@ -277,8 +278,6 @@ def compute_reliability_scores(
     primary_field: str | None = None
     required_fields: list[str] | None = None
     if schema is not None:
-        from langcore.core.schema_utils import find_primary_text_field
-
         primary_field = find_primary_text_field(schema)
         required_fields = [
             name
