@@ -629,9 +629,7 @@ class ChunkLevelRetryTest(absltest.TestCase):
         annotator.annotate_text.return_value = retry_doc
         resolver = mock.MagicMock()
 
-        result = pv.pydantic_retry(
-            doc, _Person, **self._make_retry_kwargs(annotator, resolver)
-        )
+        pv.pydantic_retry(doc, _Person, **self._make_retry_kwargs(annotator, resolver))
 
         # The annotator was called with a text shorter than the full document
         call_kwargs = annotator.annotate_text.call_args
@@ -797,7 +795,7 @@ class AsyncChunkLevelRetryTest(absltest.TestCase):
         annotator.async_annotate_text = mock.AsyncMock(return_value=retry_doc)
         resolver = mock.MagicMock()
 
-        result = asyncio.run(
+        asyncio.run(
             pv.async_pydantic_retry(
                 doc, _Person, **self._make_retry_kwargs(annotator, resolver)
             )

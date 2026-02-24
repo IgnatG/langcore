@@ -20,6 +20,7 @@ described in the Phase 1 plan.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -213,7 +214,11 @@ def _merge_usage_pair(
     original: dict[str, int] | None,
     retry: dict[str, int] | None,
 ) -> dict[str, int] | None:
-    """Sum two token-usage dicts, returning ``None`` if both are empty."""
+    """Sum two token-usage dicts, returning ``None`` if both are empty.
+
+    Normalises the result so that ``total_tokens`` is recalculated as
+    ``prompt_tokens + completion_tokens`` to avoid double-counting.
+    """
     if original is None and retry is None:
         return None
     merged: dict[str, int] = {}
@@ -221,7 +226,14 @@ def _merge_usage_pair(
         if u is not None:
             for k, v in u.items():
                 merged[k] = merged.get(k, 0) + v
-    return merged or None
+    if not merged:
+        return None
+
+    # Recalculate total_tokens to avoid double-counting across passes.
+    if "prompt_tokens" in merged and "completion_tokens" in merged:
+        merged["total_tokens"] = merged["prompt_tokens"] + merged["completion_tokens"]
+
+    return merged
 
 
 def _offset_extractions(
@@ -292,6 +304,9 @@ def pydantic_retry(
 
     original_document_id = result.document_id
     accumulated_usage = result.usage
+    # Capture the true original count before any retry iterations so
+    # the safety cap is stable across attempts.
+    true_original_count = len(result.extractions) if result.extractions else 0
 
     for attempt in range(max_retries):
         valid, invalid = validate_extractions(result, schema)
@@ -380,13 +395,12 @@ def pydantic_retry(
         merged = valid + retry_valid + still_invalid_exts
 
         # Safety cap — prevent unbounded growth from LLM hallucination.
-        original_count = len(result.extractions) if result.extractions else 0
-        cap = max(original_count * _MAX_EXTRACTION_GROWTH_FACTOR, 1)
+        cap = max(true_original_count * _MAX_EXTRACTION_GROWTH_FACTOR, 1)
         if len(merged) > cap:
             logger.warning(
                 "Extraction count grew from %d to %d during retry "
                 "(cap=%d) — trimming excess extractions",
-                original_count,
+                true_original_count,
                 len(merged),
                 cap,
             )
@@ -444,6 +458,9 @@ async def async_pydantic_retry(
 
     original_document_id = result.document_id
     accumulated_usage = result.usage
+    # Capture the true original count before any retry iterations so
+    # the safety cap is stable across attempts.
+    true_original_count = len(result.extractions) if result.extractions else 0
 
     for attempt in range(max_retries):
         valid, invalid = validate_extractions(result, schema)
@@ -478,22 +495,29 @@ async def async_pydantic_retry(
             },
         )
 
-        retry_extractions: list[data.Extraction] = []
-        for region_start, region_end in regions:
-            region_text = result.text[region_start:region_end]
+        # Re-extract all failing regions concurrently.
+        _full_text = result.text
+        _combined_ctx = combined_context
+
+        async def _retry_region(
+            region_start: int,
+            region_end: int,
+            full_text: str = _full_text,  # type: ignore[assignment]
+            ctx: str | None = _combined_ctx,
+        ) -> data.AnnotatedDocument:
+            region_text = full_text[region_start:region_end]
             logger.debug(
                 "Retry region [%d:%d] (%d chars)",
                 region_start,
                 region_end,
                 len(region_text),
             )
-
-            region_result = await annotator.async_annotate_text(
+            return await annotator.async_annotate_text(
                 text=region_text,
                 resolver=res,
                 max_char_buffer=max_char_buffer,
                 batch_length=batch_length,
-                additional_context=combined_context,
+                additional_context=ctx,
                 debug=debug,
                 extraction_passes=extraction_passes,
                 context_window_chars=context_window_chars,
@@ -503,10 +527,15 @@ async def async_pydantic_retry(
                 **alignment_kwargs,
             )
 
+        region_results = await asyncio.gather(
+            *[_retry_region(s, e) for s, e in regions]
+        )
+
+        retry_extractions: list[data.Extraction] = []
+        for (region_start, _region_end), region_result in zip(regions, region_results):
             accumulated_usage = _merge_usage_pair(
                 accumulated_usage, region_result.usage
             )
-
             if region_result.extractions:
                 _offset_extractions(region_result.extractions, region_start)
                 retry_extractions.extend(region_result.extractions)
@@ -532,13 +561,12 @@ async def async_pydantic_retry(
         merged = valid + retry_valid + still_invalid_exts
 
         # Safety cap — prevent unbounded growth from LLM hallucination.
-        original_count = len(result.extractions) if result.extractions else 0
-        cap = max(original_count * _MAX_EXTRACTION_GROWTH_FACTOR, 1)
+        cap = max(true_original_count * _MAX_EXTRACTION_GROWTH_FACTOR, 1)
         if len(merged) > cap:
             logger.warning(
                 "Extraction count grew from %d to %d during retry "
                 "(cap=%d) — trimming excess extractions",
-                original_count,
+                true_original_count,
                 len(merged),
                 cap,
             )

@@ -581,9 +581,9 @@ def extract(
                     build_kwargs=_consensus_build_kwargs,
                     annotate_kwargs=_consensus_annotate_kwargs,
                 )
-                for doc_result in doc_results:
+                for i, doc_result in enumerate(doc_results):
                     if schema is not None and effective_retries > 0:
-                        doc_result = _pydantic_validation.pydantic_retry(
+                        doc_results[i] = _pydantic_validation.pydantic_retry(
                             doc_result,
                             schema,
                             annotator,
@@ -602,7 +602,7 @@ def extract(
                             max_retries=effective_retries,
                         )
                     _compute_reliability(
-                        doc_result,
+                        doc_results[i],
                         schema=schema,
                         reliability_config=reliability_config,
                         pre_validated=schema is not None and effective_retries > 0,
@@ -957,9 +957,11 @@ async def async_extract(
                     build_kwargs=_consensus_build_kwargs,
                     annotate_kwargs=_consensus_annotate_kwargs,
                 )
-                for doc_result in doc_results:
+                for i, doc_result in enumerate(doc_results):
                     if schema is not None and effective_retries > 0:
-                        doc_result = await _pydantic_validation.async_pydantic_retry(
+                        doc_results[
+                            i
+                        ] = await _pydantic_validation.async_pydantic_retry(
                             doc_result,
                             schema,
                             annotator,
@@ -978,7 +980,7 @@ async def async_extract(
                             max_retries=effective_retries,
                         )
                     _compute_reliability(
-                        doc_result,
+                        doc_results[i],
                         schema=schema,
                         reliability_config=reliability_config,
                         pre_validated=schema is not None and effective_retries > 0,
