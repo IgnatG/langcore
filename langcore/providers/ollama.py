@@ -5,7 +5,7 @@ No API key is required since Ollama runs locally on your machine.
 
 Usage with extract():
     import langcore as lx
-    from langcore.data import ExampleData, Extraction
+    from langcore.core.data import ExampleData, Extraction
 
     # Create an example for few-shot learning
     example = ExampleData(
@@ -156,9 +156,7 @@ class OllamaLanguageModel(base_model.BaseLanguageModel):
         self,
         model_id: str,
         model_url: str = _OLLAMA_DEFAULT_MODEL_URL,
-        base_url: str | None = None,  # Alias for model_url
         format_type: core_types.FormatType | None = None,
-        structured_output_format: str | None = None,  # Deprecated
         constraint: schema.Constraint = schema.Constraint(),
         timeout: int | None = None,
         **kwargs,
@@ -167,30 +165,13 @@ class OllamaLanguageModel(base_model.BaseLanguageModel):
 
         Args:
           model_id: The Ollama model ID to use.
-          model_url: URL for Ollama server (legacy parameter).
-          base_url: Alternative parameter name for Ollama server URL.
+          model_url: URL for Ollama server.
           format_type: Output format (JSON or YAML). Defaults to JSON.
-          structured_output_format: DEPRECATED - use format_type instead.
           constraint: Schema constraints.
           timeout: Request timeout in seconds. Defaults to 120.
           **kwargs: Additional parameters.
         """
         self._requests = requests
-
-        # Handle deprecated structured_output_format parameter
-        if structured_output_format is not None:
-            warnings.warn(
-                "'structured_output_format' is deprecated and will be removed in "
-                "v2.0.0. Use 'format_type' instead.",
-                FutureWarning,
-                stacklevel=2,
-            )
-            if format_type is None:
-                format_type = (
-                    core_types.FormatType.JSON
-                    if structured_output_format == "json"
-                    else core_types.FormatType.YAML
-                )
 
         fmt = kwargs.pop("format", None)
         if format_type is None and fmt in ("json", "yaml"):
@@ -204,7 +185,7 @@ class OllamaLanguageModel(base_model.BaseLanguageModel):
             format_type = core_types.FormatType.JSON
 
         self._model = model_id
-        self._model_url = base_url or model_url or _OLLAMA_DEFAULT_MODEL_URL
+        self._model_url = model_url or _OLLAMA_DEFAULT_MODEL_URL
         self.format_type = format_type
         self._constraint = constraint
 

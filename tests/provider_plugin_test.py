@@ -48,11 +48,11 @@ class PluginSmokeTest(absltest.TestCase):
 
     def setUp(self):
         super().setUp()
-        lx.providers.registry.clear()
+        lx.providers.router.clear()
         # Always reset both flags to ensure clean state
         lx.providers._reset_for_testing()
         # Register cleanup
-        self.addCleanup(lx.providers.registry.clear)
+        self.addCleanup(lx.providers.router.clear)
         self.addCleanup(lx.providers._reset_for_testing)
 
     def test_plugin_discovery_and_usage(self):
@@ -63,7 +63,7 @@ class PluginSmokeTest(absltest.TestCase):
         """
 
         def _ep_load():
-            @lx.providers.registry.register(r"^plugin-model")
+            @lx.providers.router.register(r"^plugin-model")
             class PluginProvider(base_model.BaseLanguageModel):  # pylint: disable=too-few-public-methods
                 def __init__(self, model_id=None, **kwargs):
                     super().__init__()
@@ -86,7 +86,7 @@ class PluginSmokeTest(absltest.TestCase):
         ):
             lx.providers.load_plugins_once()
 
-        resolved_cls = lx.providers.registry.resolve("plugin-model-123")
+        resolved_cls = lx.providers.router.resolve("plugin-model-123")
         self.assertEqual(
             resolved_cls.__name__,
             "PluginProvider",
@@ -127,7 +127,7 @@ class PluginSmokeTest(absltest.TestCase):
         ):
             lx.providers.load_plugins_once()
 
-            providers = lx.providers.registry.list_providers()
+            providers = lx.providers.router.list_providers()
             self.assertIsInstance(
                 providers,
                 list,
@@ -144,7 +144,7 @@ class PluginSmokeTest(absltest.TestCase):
         """Test that load_plugins_once only discovers once."""
 
         def _ep_load():
-            @lx.providers.registry.register(r"^plugin-model")
+            @lx.providers.router.register(r"^plugin-model")
             class Plugin(base_model.BaseLanguageModel):  # pylint: disable=too-few-public-methods
                 def infer(self, *a, **k):
                     return [[types.ScoredOutput(score=1.0, output="ok")]]
@@ -186,7 +186,7 @@ class PluginSmokeTest(absltest.TestCase):
             lx.providers.load_plugins_once()
             # The system should remain functional even if a bad provider is loaded
             # Trying to use it would fail, but discovery shouldn't crash
-            providers = lx.providers.registry.list_providers()
+            providers = lx.providers.router.list_providers()
             self.assertIsInstance(
                 providers,
                 list,
@@ -195,16 +195,16 @@ class PluginSmokeTest(absltest.TestCase):
             with self.assertRaisesRegex(
                 lx.exceptions.InferenceConfigError, "No provider registered"
             ):
-                lx.providers.registry.resolve("bad")
+                lx.providers.router.resolve("bad")
 
     def test_plugin_priority_override_core_provider(self):
         """Plugin with higher priority should override core provider on conflicts."""
 
-        lx.providers.registry.clear()
+        lx.providers.router.clear()
         lx.providers._plugins_loaded = False
 
         def _ep_load():
-            @lx.providers.registry.register(r"^gemini", priority=50)
+            @lx.providers.router.register(r"^gemini", priority=50)
             class OverrideGemini(base_model.BaseLanguageModel):  # pylint: disable=too-few-public-methods
                 def infer(self, batch_prompts, **kwargs):
                     return [[types.ScoredOutput(score=1.0, output="override")]]
@@ -225,17 +225,17 @@ class PluginSmokeTest(absltest.TestCase):
 
         # Core gemini registers with priority 10 in providers.gemini
         # Our plugin registered with priority 50; it should win.
-        resolved = lx.providers.registry.resolve("gemini-2.5-flash")
+        resolved = lx.providers.router.resolve("gemini-2.5-flash")
         self.assertEqual(resolved.__name__, "OverrideGemini")
 
     def test_resolve_provider_for_plugin(self):
         """resolve_provider should find plugin by class name and name-insensitive."""
 
-        lx.providers.registry.clear()
+        lx.providers.router.clear()
         lx.providers._plugins_loaded = False
 
         def _ep_load():
-            @lx.providers.registry.register(r"^plugin-resolve")
+            @lx.providers.router.register(r"^plugin-resolve")
             class ResolveMePlease(base_model.BaseLanguageModel):  # pylint: disable=too-few-public-methods
                 def infer(self, batch_prompts, **kwargs):
                     return [[types.ScoredOutput(score=1.0, output="ok")]]
@@ -254,10 +254,10 @@ class PluginSmokeTest(absltest.TestCase):
         ):
             lx.providers.load_plugins_once()
 
-        cls_by_exact = lx.providers.registry.resolve_provider("ResolveMePlease")
+        cls_by_exact = lx.providers.router.resolve_provider("ResolveMePlease")
         self.assertEqual(cls_by_exact.__name__, "ResolveMePlease")
 
-        cls_by_partial = lx.providers.registry.resolve_provider("resolveme")
+        cls_by_partial = lx.providers.router.resolve_provider("resolveme")
         self.assertEqual(cls_by_partial.__name__, "ResolveMePlease")
 
     def test_plugin_with_custom_schema(self):
@@ -281,7 +281,7 @@ class PluginSmokeTest(absltest.TestCase):
                 return True
 
         def _ep_load():
-            @lx.providers.registry.register(r"^custom-schema-test")
+            @lx.providers.router.register(r"^custom-schema-test")
             class SchemaTestProvider(base_model.BaseLanguageModel):
                 def __init__(self, model_id=None, **kwargs):
                     super().__init__()
@@ -314,7 +314,7 @@ class PluginSmokeTest(absltest.TestCase):
         ):
             lx.providers.load_plugins_once()
 
-        provider_cls = lx.providers.registry.resolve("custom-schema-test-v1")
+        provider_cls = lx.providers.router.resolve("custom-schema-test-v1")
         self.assertEqual(
             provider_cls.get_schema_class().__name__,
             "TestPluginSchema",
@@ -383,7 +383,7 @@ class PluginE2ETest(absltest.TestCase):
                 return True
 
         def _ep_load():
-            @lx.providers.registry.register(r"^e2e-schema-test")
+            @lx.providers.router.register(r"^e2e-schema-test")
             class SchemaE2EProvider(base_model.BaseLanguageModel):
                 def __init__(self, model_id=None, **kwargs):
                     super().__init__()
@@ -415,9 +415,9 @@ class PluginE2ETest(absltest.TestCase):
         )
 
         # Clear and set up registry
-        lx.providers.registry.clear()
+        lx.providers.router.clear()
         lx.providers._plugins_loaded = False
-        self.addCleanup(lx.providers.registry.clear)
+        self.addCleanup(lx.providers.router.clear)
         self.addCleanup(setattr, lx.providers, "_plugins_loaded", False)
 
         with mock.patch.object(
@@ -518,7 +518,7 @@ class PluginE2ETest(absltest.TestCase):
             def requires_raw_output(self):
                 return True
 
-        @lx.providers.registry.register(r'^test-pip-model', priority=50)
+        @lx.providers.router.register(r'^test-pip-model', priority=50)
         class TestPipProvider(base_model.BaseLanguageModel):
             def __init__(self, model_id, **kwargs):
                 super().__init__()
@@ -622,7 +622,7 @@ class PluginE2ETest(absltest.TestCase):
           assert model2.requires_fence_output == False, "Schema outputs raw JSON, should not need fences"
 
           # Test 3: Verify schema class is available
-          provider_cls = lx.providers.registry.resolve("test-pip-model-xyz")
+          provider_cls = lx.providers.router.resolve("test-pip-model-xyz")
           assert provider_cls.__name__ == "TestPipProvider", "Plugin should be resolvable"
           schema_cls = provider_cls.get_schema_class()
           assert schema_cls.__name__ == "TestPipSchema", f"Schema class should be TestPipSchema, got {{schema_cls.__name__}}"
@@ -655,7 +655,7 @@ class PluginE2ETest(absltest.TestCase):
                     env=pip_env,
                 )
 
-                lx.providers.registry.clear()
+                lx.providers.router.clear()
                 lx.providers._plugins_loaded = False
                 lx.providers.load_plugins_once()
 
@@ -663,7 +663,7 @@ class PluginE2ETest(absltest.TestCase):
                     lx.exceptions.InferenceConfigError,
                     "No provider registered for model_id='test-pip-model",
                 ):
-                    lx.providers.registry.resolve("test-pip-model-789")
+                    lx.providers.router.resolve("test-pip-model-789")
 
 
 if __name__ == "__main__":

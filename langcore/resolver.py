@@ -184,7 +184,7 @@ class Resolver(AbstractResolver):
         self,
         format_handler: fh.FormatHandler | None = None,
         extraction_index_suffix: str | None = None,
-        **kwargs,  # Collect legacy parameters
+        constraint: schema.Constraint | None = None,
     ):
         """Constructor.
 
@@ -192,34 +192,10 @@ class Resolver(AbstractResolver):
           format_handler: The format handler that knows how to parse output.
           extraction_index_suffix: Suffix identifying index keys that determine the
             ordering of extractions.
-          **kwargs: Legacy parameters (fence_output, format_type, etc.) for backward
-            compatibility. These will be used to create a FormatHandler if one is not
-            provided. Support for these parameters will be removed in v2.0.0.
+          constraint: Schema constraints.
         """
-        constraint = kwargs.pop("constraint", None)
-        extraction_attributes_suffix = kwargs.pop("extraction_attributes_suffix", None)
-
         if format_handler is None:
-            if kwargs or extraction_attributes_suffix is not None:
-                handler_kwargs = dict(kwargs)
-                if extraction_attributes_suffix is not None:
-                    handler_kwargs["attribute_suffix"] = extraction_attributes_suffix
-                format_handler = fh.FormatHandler.from_kwargs(**handler_kwargs)
-                for param in [
-                    "fence_output",
-                    "format_type",
-                    "strict_fences",
-                    "require_extractions_key",
-                    "attribute_suffix",
-                ]:
-                    kwargs.pop(param, None)
-            else:
-                format_handler = fh.FormatHandler()
-
-        if kwargs:
-            raise TypeError(
-                f"got an unexpected keyword argument '{next(iter(kwargs.keys()))}'"
-            )
+            format_handler = fh.FormatHandler()
 
         constraint = constraint or schema.Constraint()
         super().__init__(
@@ -346,41 +322,6 @@ class Resolver(AbstractResolver):
             yield extraction
 
         logging.debug("Completed alignment process for the provided source_text.")
-
-    def string_to_extraction_data(
-        self,
-        input_string: str,
-    ) -> Sequence[Mapping[str, fh.ExtractionValueType]]:
-        """Parses a YAML or JSON-formatted string into extraction data.
-
-        This method is kept for backward compatibility with tests.
-        It delegates to the FormatHandler for actual parsing.
-
-        Args:
-            input_string: A string containing YAML or JSON content.
-
-        Returns:
-            Sequence[Mapping[str, fh.ExtractionValueType]]: A sequence of parsed objects.
-
-        Raises:
-            ResolverParsingError: If the content within the string cannot be parsed.
-            ValueError: If the input is invalid or does not contain expected format.
-        """
-        if not input_string or not isinstance(input_string, str):
-            logging.error("Input string must be a non-empty string.")
-            raise ValueError("Input string must be a non-empty string.")
-
-        try:
-            constraint = getattr(self, "_constraint", schema.Constraint())
-            strict = getattr(constraint, "strict", False)
-            return self.format_handler.parse_output(input_string, strict=strict)
-
-        except exceptions.FormatError as e:
-            raise ResolverParsingError(str(e)) from e
-
-        except Exception as e:
-            logging.exception("Failed to parse content.")
-            raise ResolverParsingError("Failed to parse content.") from e
 
     def extract_ordered_extractions(
         self,

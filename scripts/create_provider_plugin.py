@@ -164,7 +164,7 @@ from langcore_{package_name}.schema import {provider_name}Schema"""
         import langcore as lx{schema_imports}
 
 
-        @lx.providers.registry.register({patterns_str}, priority=10)
+        @lx.providers.router.register({patterns_str}, priority=10)
         class {provider_name}LanguageModel(lx.inference.BaseLanguageModel):
             """LangCore provider for {provider_name}.
 
@@ -333,7 +333,7 @@ def create_test_script(
         import re
         import sys
         import langcore as lx
-        from langcore.providers import registry
+        from langcore.providers import router
 
         try:
             from langcore_{package_name} import {provider_cls_name}
@@ -363,7 +363,7 @@ def create_test_script(
         print("1–2. Provider registration & pattern matching")
         for model_id in sample_ids:
             try:
-                provider_class = registry.resolve(model_id)
+                provider_class = router.resolve(model_id)
                 ok = provider_class.__name__ == PROVIDER_CLS_NAME
                 status = "✓" if (ok or model_id == "unknown-model") else "✗"
                 note = "expected" if ok else ("expected (no provider)" if model_id == "unknown-model" else "unexpected provider")

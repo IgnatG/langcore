@@ -103,7 +103,7 @@ class FactorySchemaIntegrationTest(absltest.TestCase):
 
         with (
             mock.patch(
-                "langcore.providers.registry.resolve", return_value=NoSchemaModel
+                "langcore.providers.router.resolve", return_value=NoSchemaModel
             ),
             mock.patch.object(NoSchemaModel, "__init__", return_value=None),
         ):
@@ -210,7 +210,7 @@ class SchemaApplicationTest(absltest.TestCase):
 
         with (
             mock.patch(
-                "langcore.providers.registry.resolve", return_value=SchemaAwareModel
+                "langcore.providers.router.resolve", return_value=SchemaAwareModel
             ),
             mock.patch.object(SchemaAwareModel, "__init__", return_value=None),
         ):

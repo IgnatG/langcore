@@ -1,7 +1,7 @@
 """Tests for the provider registry module.
 
 Note: This file tests the deprecated registry module which is now an alias
-for router. The no-name-in-module warning for providers.registry is expected.
+for router. The no-name-in-module warning for providers.router is expected.
 Test helper classes also intentionally have few public methods.
 """
 

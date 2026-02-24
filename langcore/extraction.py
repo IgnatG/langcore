@@ -156,17 +156,6 @@ def _build_extraction_components(
 
         base_lm_kwargs.update(language_model_params or {})
 
-        # Emit deprecation warning for legacy gemini_schema parameter
-        if "gemini_schema" in base_lm_kwargs:
-            warnings.warn(
-                "'gemini_schema' is deprecated and will be removed in v2.0.0. "
-                "Use 'use_schema_constraints=True' instead, which automatically "
-                "generates schema constraints for supported providers.",
-                FutureWarning,
-                stacklevel=3,
-            )
-            base_lm_kwargs.pop("gemini_schema", None)
-
         filtered_kwargs = {k: v for k, v in base_lm_kwargs.items() if v is not None}
 
         config = factory.ModelConfig(model_id=model_id, provider_kwargs=filtered_kwargs)

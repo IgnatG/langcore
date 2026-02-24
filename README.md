@@ -337,14 +337,18 @@ result = lx.extract(
 )
 ```
 
-> **Tip:** Use `lx.schema_from_pydantic(Invoice)` to inspect the auto-generated prompt and JSON schema before running extraction. Use `lx.schema_from_example({"name": "John", "age": 30})` to auto-generate a Pydantic model from a plain dict.
+> **Tip:** Use `lx.schema_from_pydantic(Invoice)` to inspect the auto-generated prompt and JSON schema before running extraction. Use `lx.schema_from_example({"name": "John", "age": 30})` to auto-generate a Pydantic model from a plain dict, or `lx.schema_from_examples([{"name": "John"}, {"name": "Jane", "age": 30}])` to merge multiple examples (fields default to optional when absent from some examples).
+
+> **Under the hood:** The `PydanticSchemaAdapter` converts your Pydantic model into LangCore's internal `SchemaConfig` — auto-generating the prompt description, JSON schema, and seed examples. You can use it directly for advanced scenarios: `from langcore.pydantic_schema import PydanticSchemaAdapter`.
 
 ### Confidence Scoring
 
-Every extraction is automatically assigned a `confidence_score` between 0.0 and 1.0 after alignment. The score combines two signals:
+Every extraction is automatically assigned a `confidence_score` between 0.0 and 1.0 after alignment. The score is computed by `compute_alignment_confidence()` in the resolver and combines two signals:
 
-- **Alignment quality** (70% weight) — how well the extraction text matched the source: exact match = 1.0, lesser = 0.8, greater = 0.7, fuzzy = 0.5, unaligned = 0.2.
-- **Token overlap ratio** (30% weight) — how many tokens in the extraction text vs. the matched source span.
+- **Alignment quality** (`w_alignment`, default 70%) — how well the extraction text matched the source: exact match = 1.0, lesser = 0.8, greater = 0.7, fuzzy = 0.5, unaligned = 0.2.
+- **Token overlap ratio** (`w_overlap`, default 30%) — how many tokens in the extraction text vs. the matched source span.
+
+Both weights are configurable — pass `w_alignment` and `w_overlap` keyword arguments to `compute_alignment_confidence()` to tune the balance for your use case.
 
 ```python
 result = lx.extract(
@@ -361,7 +365,7 @@ for extraction in result.extractions:
 print(f"Average confidence: {result.average_confidence}")
 ```
 
-For **multi-pass extraction**, confidence is further augmented by cross-pass appearance frequency — extractions confirmed across multiple passes receive higher scores.
+For **multi-pass extraction**, confidence is further augmented by cross-pass appearance frequency — extractions confirmed across multiple passes receive higher scores (`cross_pass_ratio × alignment_confidence`).
 
 ### Extraction Hooks & Events
 
@@ -369,26 +373,26 @@ The `langcore.hooks` module provides a lightweight event system inspired by
 [Instructor](https://python.useinstructor.com/) hooks to inject custom logic at
 every stage of the extraction pipeline — without modifying core code.
 
-**Lifecycle events:**
+**Lifecycle events** are defined by the `HookName` enum (you can also use plain strings):
 
-| Event | Fires when | Payload keys |
-|---|---|---|
-| `extraction:start` | Pipeline begins (after components are built) | `text`, `examples`, `model_id` |
-| `extraction:chunk` | A document chunk has been processed | `chunk_index`, `num_chunks`, `chunk_text`, `extractions` |
-| `extraction:llm_call` | An LLM inference call completes | `prompt`, `response` |
-| `extraction:alignment` | Extraction alignment is performed | `extractions` |
-| `extraction:complete` | Pipeline finishes successfully | `result` |
-| `extraction:error` | An exception is raised | `error` |
+| Event | `HookName` | Fires when | Payload keys |
+|---|---|---|---|
+| `extraction:start` | `HookName.START` | Pipeline begins (after components are built) | `text`, `examples`, `model_id` |
+| `extraction:chunk` | `HookName.CHUNK` | A document chunk has been processed | `chunk_index`, `num_chunks`, `chunk_text`, `extractions` |
+| `extraction:llm_call` | `HookName.LLM_CALL` | An LLM inference call completes | `prompt`, `response` |
+| `extraction:alignment` | `HookName.ALIGNMENT` | Extraction alignment is performed | `extractions` |
+| `extraction:complete` | `HookName.COMPLETE` | Pipeline finishes successfully | `result` |
+| `extraction:error` | `HookName.ERROR` | An exception is raised | `error` |
 
 **Quick example:**
 
 ```python
-from langcore.hooks import Hooks
+from langcore.hooks import Hooks, HookName
 
 hooks = Hooks()
-hooks.on("extraction:start", lambda payload: print("Starting extraction…"))
-hooks.on("extraction:llm_call", lambda payload: print(f"LLM responded"))
-hooks.on("extraction:error", lambda payload: alert_team(payload["error"]))
+hooks.on(HookName.START, lambda payload: print("Starting extraction…"))
+hooks.on(HookName.LLM_CALL, lambda payload: print(f"LLM responded"))
+hooks.on(HookName.ERROR, lambda payload: alert_team(payload["error"]))
 
 result = lx.extract(
     text="Patient received Lisinopril 10mg daily.",
@@ -398,12 +402,29 @@ result = lx.extract(
 )
 ```
 
+**Programmatic emission** — use `emit()` (sync) or `async_emit()` (async) to fire
+events from your own code or custom providers:
+
+```python
+hooks.emit("extraction:start", {"text": "hello", "model_id": "gpt-4o"})
+
+# In async contexts, async_emit() awaits coroutine handlers
+await hooks.async_emit("extraction:complete", {"result": result})
+```
+
 **Composing hooks** — merge two `Hooks` instances with `+`:
 
 ```python
 logging_hooks = Hooks().on("extraction:llm_call", log_llm_call)
 metrics_hooks = Hooks().on("extraction:complete", record_metrics)
 combined = logging_hooks + metrics_hooks
+```
+
+**Removing handlers** — use `off()` to remove a specific handler, or `clear()` to remove all:
+
+```python
+hooks.off(HookName.LLM_CALL, log_llm_call)
+hooks.clear()
 ```
 
 Callbacks are **fault-tolerant**: if a handler raises an exception it is logged

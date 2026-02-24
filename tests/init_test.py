@@ -26,7 +26,8 @@ class InitTest(parameterized.TestCase):
         mock_model.infer.return_value = [
             [
                 types.ScoredOutput(
-                    output=textwrap.dedent("""\
+                    output=textwrap.dedent(
+                        """\
             ```json
             {
               "extractions": [
@@ -45,7 +46,8 @@ class InitTest(parameterized.TestCase):
                 }
               ]
             }
-            ```"""),
+            ```"""
+                    ),
                     score=0.9,
                 )
             ]
@@ -85,9 +87,11 @@ class InitTest(parameterized.TestCase):
             text="Patient takes Aspirin 100mg every morning.",
         )
 
-        mock_description = textwrap.dedent("""\
+        mock_description = textwrap.dedent(
+            """\
         Extract medication and dosage information in order of occurrence.
-        """)
+        """
+        )
 
         mock_examples = [
             lx.data.ExampleData(
@@ -507,7 +511,7 @@ class InitTest(parameterized.TestCase):
 
         mock_tokenizer.tokenize.assert_called_with(input_text)
 
-    def test_data_module_exports_via_compatibility_shim(self):
+    def test_data_module_exports(self):
         """Verify data module exports are accessible via lx.data."""
         expected_exports = [
             "AlignmentStatus",
@@ -523,10 +527,10 @@ class InitTest(parameterized.TestCase):
             with self.subTest(export=name):
                 self.assertTrue(
                     hasattr(lx.data, name),
-                    f"lx.data.{name} not accessible via compatibility shim",
+                    f"lx.data.{name} not accessible via lazy import",
                 )
 
-    def test_tokenizer_module_exports_via_compatibility_shim(self):
+    def test_tokenizer_module_exports(self):
         """Verify tokenizer module exports are accessible via lx.tokenizer."""
         expected_exports = [
             "BaseTokenizerError",
@@ -546,7 +550,7 @@ class InitTest(parameterized.TestCase):
             with self.subTest(export=name):
                 self.assertTrue(
                     hasattr(lx.tokenizer, name),
-                    f"lx.tokenizer.{name} not accessible via compatibility shim",
+                    f"lx.tokenizer.{name} not accessible via lazy import",
                 )
 
     @parameterized.named_parameters(

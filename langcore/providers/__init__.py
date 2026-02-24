@@ -13,15 +13,12 @@ from absl import logging
 
 from langcore.providers import builtin_registry, router
 
-registry = router  # Backward compat alias
-
 __all__ = [
     "gemini",
     "load_builtins_once",
     "load_plugins_once",
     "ollama",
     "openai",
-    "registry",  # Backward compat
     "router",
     "schemas",
 ]

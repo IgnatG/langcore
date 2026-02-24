@@ -327,8 +327,3 @@ class ExampleData:
 
     text: str
     extractions: list[Extraction] = dataclasses.field(default_factory=list)
-
-
-# Backward-compatible alias for external code that may have
-# imported the private helper directly.
-_find_primary_text_field = find_primary_text_field

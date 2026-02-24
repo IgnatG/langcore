@@ -287,8 +287,3 @@ def _dict_to_extraction(
         extraction_text=extraction_text,
         attributes=attributes if attributes else None,
     )
-
-
-# Backward-compatible alias for external code that may have
-# imported the private helper directly.
-_find_primary_text_field = find_primary_text_field

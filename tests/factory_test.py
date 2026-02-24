@@ -1,7 +1,7 @@
 """Tests for the factory module.
 
 Note: This file tests the deprecated registry module which is now an alias
-for router. The no-name-in-module warning for providers.registry is expected.
+for router. The no-name-in-module warning for providers.router is expected.
 """
 
 # pylint: disable=no-name-in-module

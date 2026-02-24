@@ -11,14 +11,8 @@ from langcore.core import format_handler as fh
 
 __all__ = [
     "BaseSchema",
-    "Constraint",
-    "ConstraintType",
     "FormatModeSchema",
 ]
-
-# Backward compat re-exports
-ConstraintType = types.ConstraintType
-Constraint = types.Constraint
 
 
 class BaseSchema(abc.ABC):
@@ -87,8 +81,6 @@ class FormatModeSchema(BaseSchema):
     def __init__(self, format_type: types.FormatType = types.FormatType.JSON):
         """Initialize with a format type."""
         self.format_type = format_type
-        # Keep _format for backward compatibility with tests
-        self._format = "json" if format_type == types.FormatType.JSON else "yaml"
 
     @classmethod
     def from_examples(

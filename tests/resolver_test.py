@@ -124,7 +124,7 @@ class ParserTest(parameterized.TestCase):
         self, resolver, input_text, expected_exception, expected_regex
     ):
         with self.assertRaisesRegex(expected_exception, expected_regex):
-            resolver.string_to_extraction_data(input_text)
+            resolver.resolve(input_text)
 
 
 class ExtractOrderedEntitiesTest(parameterized.TestCase):
@@ -2213,7 +2213,7 @@ class FenceFallbackTest(parameterized.TestCase):
             format_type=data.FormatType.JSON,
             strict_fences=strict_fences,
         )
-        result = resolver.string_to_extraction_data(test_input)
+        result = resolver.resolve(test_input)
         self.assertLen(result, 1)
         self.assertIn(expected_key, result[0])
         self.assertEqual(result[0][expected_key], expected_value)
@@ -2242,7 +2242,7 @@ class FenceFallbackTest(parameterized.TestCase):
             format_type=data.FormatType.JSON,
             strict_fences=False,
         )
-        result = resolver.string_to_extraction_data(test_input)
+        result = resolver.resolve(test_input)
         self.assertLen(result, 2, "Should preserve all extractions during fallback")
 
         self.assertEqual(
@@ -2279,7 +2279,7 @@ class FenceFallbackTest(parameterized.TestCase):
             strict_fences=False,
         )
         with self.assertRaises(resolver_lib.ResolverParsingError):
-            resolver.string_to_extraction_data(test_input)
+            resolver.resolve(test_input)
 
     def test_strict_fences_raises_on_missing_markers(self):
         strict_resolver = resolver_lib.Resolver(
@@ -2293,7 +2293,7 @@ class FenceFallbackTest(parameterized.TestCase):
         with self.assertRaisesRegex(
             resolver_lib.ResolverParsingError, ".*fence markers.*"
         ):
-            strict_resolver.string_to_extraction_data(test_input)
+            strict_resolver.resolve(test_input)
 
     def test_default_allows_fallback(self):
         default_resolver = resolver_lib.Resolver(
@@ -2303,7 +2303,7 @@ class FenceFallbackTest(parameterized.TestCase):
         test_input = textwrap.dedent("""\
         {"extractions": [{"person": "Default Test"}]}""")
 
-        result = default_resolver.string_to_extraction_data(test_input)
+        result = default_resolver.resolve(test_input)
         self.assertLen(result, 1)
         self.assertEqual(result[0]["person"], "Default Test")
 
@@ -2325,7 +2325,7 @@ class FenceFallbackTest(parameterized.TestCase):
         with self.assertRaisesRegex(
             resolver_lib.ResolverParsingError, "Multiple fenced blocks found"
         ):
-            resolver.string_to_extraction_data(test_input)
+            resolver.resolve(test_input)
 
 
 class FlexibleSchemaTest(parameterized.TestCase):
@@ -2342,7 +2342,7 @@ class FlexibleSchemaTest(parameterized.TestCase):
             format_type=data.FormatType.JSON,
             require_extractions_key=False,
         )
-        result = resolver.string_to_extraction_data(test_input)
+        result = resolver.resolve(test_input)
         self.assertLen(result, 2)
         self.assertEqual(result[0]["person"], "Marie Curie")
         self.assertEqual(result[1]["person"], "Albert Einstein")
@@ -2354,7 +2354,7 @@ class FlexibleSchemaTest(parameterized.TestCase):
             format_type=data.FormatType.JSON,
             require_extractions_key=False,
         )
-        result = resolver.string_to_extraction_data(test_input)
+        result = resolver.resolve(test_input)
         self.assertLen(result, 1)
         self.assertEqual(result[0]["person"], "Isaac Newton")
         self.assertEqual(result[0]["field"], "gravity")
@@ -2371,7 +2371,7 @@ class FlexibleSchemaTest(parameterized.TestCase):
             format_type=data.FormatType.JSON,
             require_extractions_key=False,
         )
-        result = resolver.string_to_extraction_data(test_input)
+        result = resolver.resolve(test_input)
         self.assertLen(result, 1)
         self.assertEqual(result[0]["person"], "Charles Darwin")
 
@@ -2383,7 +2383,7 @@ class FlexibleSchemaTest(parameterized.TestCase):
             format_type=data.FormatType.JSON,
             require_extractions_key=True,
         )
-        result = resolver.string_to_extraction_data(test_input)
+        result = resolver.resolve(test_input)
         self.assertLen(result, 1)
         self.assertEqual(result[0]["person"], "Test")
 
@@ -2404,7 +2404,7 @@ class FlexibleSchemaTest(parameterized.TestCase):
             format_type=data.FormatType.JSON,
             require_extractions_key=False,
         )
-        result = resolver.string_to_extraction_data(test_input)
+        result = resolver.resolve(test_input)
         self.assertLen(result, 2)
         self.assertEqual(result[0]["medication"], "Aspirin")
         self.assertEqual(result[0]["medication_attributes"]["dosage"], "100mg")

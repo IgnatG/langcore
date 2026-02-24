@@ -189,7 +189,7 @@ class OllamaFormatParameterTest(absltest.TestCase):
             mock_post.return_value = mock_response
 
             # Mock the registry to return OllamaLanguageModel
-            with mock.patch("langcore.providers.registry.resolve") as mock_resolve:
+            with mock.patch("langcore.providers.router.resolve") as mock_resolve:
                 mock_resolve.return_value = ollama.OllamaLanguageModel
 
                 examples = [
@@ -275,7 +275,7 @@ class OllamaYAMLOverrideTest(absltest.TestCase):
             mock_response.json.return_value = {"response": '{"extractions": []}'}
             mock_post.return_value = mock_response
 
-            with mock.patch("langcore.providers.registry.resolve") as mock_resolve:
+            with mock.patch("langcore.providers.router.resolve") as mock_resolve:
                 mock_resolve.return_value = ollama.OllamaLanguageModel
 
                 config = factory.ModelConfig(
@@ -315,7 +315,7 @@ class OllamaYAMLOverrideTest(absltest.TestCase):
             mock_response.json.return_value = {"response": '{"extractions": []}'}
             mock_post.return_value = mock_response
 
-            with mock.patch("langcore.providers.registry.resolve") as mock_resolve:
+            with mock.patch("langcore.providers.router.resolve") as mock_resolve:
                 mock_resolve.return_value = ollama.OllamaLanguageModel
 
                 config = factory.ModelConfig(
@@ -516,44 +516,6 @@ class GeminiSchemaProviderIntegrationTest(absltest.TestCase):
                 call_kwargs["config"],
                 msg="response_schema should be forwarded to genai API config",
             )
-
-
-class SchemaShimTest(absltest.TestCase):
-    """Tests for backward compatibility shims in schema module."""
-
-    def test_constraint_types_import(self):
-        """Test that Constraint and ConstraintType can be imported."""
-        from langcore import (
-            schema as lx_schema,  # pylint: disable=reimported,import-outside-toplevel
-        )
-
-        constraint = lx_schema.Constraint()
-        self.assertEqual(
-            constraint.constraint_type,
-            lx_schema.ConstraintType.NONE,
-            msg="Default Constraint should have type NONE",
-        )
-
-        self.assertEqual(
-            lx_schema.ConstraintType.NONE.value,
-            "none",
-            msg="ConstraintType.NONE should have value 'none'",
-        )
-
-    def test_provider_schema_imports(self):
-        """Test that provider schemas can be imported from schema module."""
-        from langcore import (
-            schema as lx_schema,  # pylint: disable=reimported,import-outside-toplevel
-        )
-
-        # Backward compatibility: re-exported from providers.schemas.gemini
-        self.assertTrue(
-            hasattr(lx_schema, "GeminiSchema"),
-            msg=(
-                "GeminiSchema should be importable from schema module for backward"
-                " compatibility"
-            ),
-        )
 
 
 if __name__ == "__main__":

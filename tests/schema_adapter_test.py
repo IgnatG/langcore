@@ -312,7 +312,7 @@ class SchemaFromPydanticTest(absltest.TestCase):
 
 
 class FindPrimaryTextFieldTest(parameterized.TestCase):
-    """Tests for _find_primary_text_field."""
+    """Tests for find_primary_text_field."""
 
     @parameterized.parameters(
         (_Person, "name"),
@@ -320,7 +320,7 @@ class FindPrimaryTextFieldTest(parameterized.TestCase):
     )
     def test_primary_field_selection(self, model_cls, expected):
         """Correct primary text field is selected."""
-        result = schema_adapter._find_primary_text_field(model_cls)
+        result = schema_adapter.find_primary_text_field(model_cls)
         self.assertEqual(result, expected)
 
 
