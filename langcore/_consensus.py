@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 from langcore import annotation as annotation_mod
@@ -71,6 +72,8 @@ def _merge_usage(
 def merge_consensus_results(
     results: list[data.AnnotatedDocument],
     text: str | None,
+    *,
+    document_id: str | None = None,
 ) -> data.AnnotatedDocument:
     """Merge extraction results from multiple models into a consensus.
 
@@ -81,6 +84,10 @@ def merge_consensus_results(
     Parameters:
         results: One ``AnnotatedDocument`` per model.
         text: The original source text.
+        document_id: Optional document ID to forward to the merged
+            result.  When not provided the ID from the first result is
+            used (if available), ensuring that the original document
+            identity is preserved through the consensus pipeline.
 
     Returns:
         A single ``AnnotatedDocument`` with merged extractions.
@@ -102,7 +109,10 @@ def merge_consensus_results(
 
     usage = _merge_usage([r.usage for r in results])
 
+    effective_id = document_id or results[0]._document_id
+
     merged = data.AnnotatedDocument(
+        document_id=effective_id,
         extractions=merged_extractions or None,
         text=text,
         usage=usage,
@@ -118,6 +128,7 @@ def consensus_extract(
     build_kwargs: dict[str, Any],
     annotate_kwargs: dict[str, Any],
     max_workers: int | None = None,
+    fail_fast: bool = True,
 ) -> data.AnnotatedDocument:
     """Run sync extraction with each model **in parallel** and merge results.
 
@@ -136,6 +147,10 @@ def consensus_extract(
             (without ``text`` and ``resolver``).
         max_workers: Maximum number of threads.  Defaults to
             ``min(len(model_ids), 4)``.
+        fail_fast: If ``True`` (default), any model failure raises
+            immediately.  If ``False``, failed models are logged and
+            skipped; the consensus is computed from successful results
+            only.  Raises :class:`RuntimeError` if **all** models fail.
 
     Returns:
         A single ``AnnotatedDocument`` with consensus extractions.
@@ -167,8 +182,19 @@ def consensus_extract(
             try:
                 results.append(future.result())
             except Exception:
-                logger.exception("Consensus extraction failed for model %s", mid)
-                raise
+                if fail_fast:
+                    logger.exception("Consensus extraction failed for model %s", mid)
+                    raise
+                logger.warning(
+                    "Consensus extraction failed for model %s (skipping)",
+                    mid,
+                    exc_info=True,
+                )
+
+    if not results:
+        raise RuntimeError(
+            f"All consensus models failed. Models attempted: {', '.join(model_ids)}"
+        )
 
     return merge_consensus_results(results, text=text)
 
@@ -180,6 +206,7 @@ async def async_consensus_extract(
     build_components_fn: Any,
     build_kwargs: dict[str, Any],
     annotate_kwargs: dict[str, Any],
+    fail_fast: bool = True,
 ) -> data.AnnotatedDocument:
     """Run async extraction with each model and merge results.
 
@@ -193,6 +220,10 @@ async def async_consensus_extract(
             (without ``model_id``).
         annotate_kwargs: Keyword arguments for ``annotator.annotate_text``
             (without ``text`` and ``resolver``).
+        fail_fast: If ``True`` (default), any model failure raises
+            immediately.  If ``False``, failed models are logged and
+            skipped.  Raises :class:`RuntimeError` if **all** models
+            fail.
 
     Returns:
         A single ``AnnotatedDocument`` with consensus extractions.
@@ -212,5 +243,120 @@ async def async_consensus_extract(
         _tag_extractions(result, mid)
         return result
 
-    results = await asyncio.gather(*[_run_one(mid) for mid in model_ids])
+    raw_results = await asyncio.gather(
+        *[_run_one(mid) for mid in model_ids],
+        return_exceptions=not fail_fast,
+    )
+
+    results: list[data.AnnotatedDocument] = []
+    for mid, res_or_exc in zip(model_ids, raw_results):
+        if isinstance(res_or_exc, BaseException):
+            logger.warning(
+                "Consensus extraction failed for model %s (skipping): %s",
+                mid,
+                res_or_exc,
+            )
+        else:
+            results.append(res_or_exc)
+
+    if not results:
+        raise RuntimeError(
+            f"All consensus models failed. Models attempted: {', '.join(model_ids)}"
+        )
+
     return merge_consensus_results(list(results), text=text)
+
+
+# ── Document-list consensus ──────────────────────────────────────
+
+
+def consensus_extract_documents(
+    documents: Iterable[data.Document],
+    model_ids: list[str],
+    *,
+    build_components_fn: Any,
+    build_kwargs: dict[str, Any],
+    annotate_kwargs: dict[str, Any],
+    max_workers: int | None = None,
+    fail_fast: bool = True,
+) -> list[data.AnnotatedDocument]:
+    """Run sync consensus extraction over a list of documents.
+
+    Each document is extracted independently by every model, then
+    per-document results are merged.  The original ``document_id`` of
+    each :class:`~langcore.core.data.Document` is forwarded to the
+    merged :class:`~langcore.core.data.AnnotatedDocument`.
+
+    Parameters:
+        documents: Iterable of :class:`~langcore.core.data.Document`.
+        model_ids: List of model IDs to extract with.
+        build_components_fn: Reference to ``_build_extraction_components``.
+        build_kwargs: Keyword arguments for ``_build_extraction_components``
+            (without ``model_id`` and ``text_or_documents``).
+        annotate_kwargs: Keyword arguments for ``annotator.annotate_text``
+            (without ``text`` and ``resolver``).
+        max_workers: Maximum parallel threads (forwarded to
+            :func:`consensus_extract`).
+        fail_fast: If ``True`` (default), any model failure raises
+            immediately.  See :func:`consensus_extract`.
+
+    Returns:
+        A list of ``AnnotatedDocument``, one per input document.
+    """
+    merged_results: list[data.AnnotatedDocument] = []
+    for doc in documents:
+        # Override text_or_documents for this specific document.
+        doc_build_kwargs = {**build_kwargs, "text_or_documents": doc.text}
+        result = consensus_extract(
+            text=doc.text,
+            model_ids=model_ids,
+            build_components_fn=build_components_fn,
+            build_kwargs=doc_build_kwargs,
+            annotate_kwargs=annotate_kwargs,
+            max_workers=max_workers,
+            fail_fast=fail_fast,
+        )
+        result.document_id = doc.document_id
+        merged_results.append(result)
+    return merged_results
+
+
+async def async_consensus_extract_documents(
+    documents: Iterable[data.Document],
+    model_ids: list[str],
+    *,
+    build_components_fn: Any,
+    build_kwargs: dict[str, Any],
+    annotate_kwargs: dict[str, Any],
+    fail_fast: bool = True,
+) -> list[data.AnnotatedDocument]:
+    """Async version of :func:`consensus_extract_documents`.
+
+    Each document is processed sequentially (models run concurrently
+    per document via :func:`async_consensus_extract`).
+
+    Parameters:
+        documents: Iterable of :class:`~langcore.core.data.Document`.
+        model_ids: List of model IDs to extract with.
+        build_components_fn: Reference to ``_build_extraction_components``.
+        build_kwargs: Keyword arguments for ``_build_extraction_components``.
+        annotate_kwargs: Keyword arguments for ``annotator.annotate_text``.
+        fail_fast: See :func:`async_consensus_extract`.
+
+    Returns:
+        A list of ``AnnotatedDocument``, one per input document.
+    """
+    merged_results: list[data.AnnotatedDocument] = []
+    for doc in documents:
+        doc_build_kwargs = {**build_kwargs, "text_or_documents": doc.text}
+        result = await async_consensus_extract(
+            text=doc.text,
+            model_ids=model_ids,
+            build_components_fn=build_components_fn,
+            build_kwargs=doc_build_kwargs,
+            annotate_kwargs=annotate_kwargs,
+            fail_fast=fail_fast,
+        )
+        result.document_id = doc.document_id
+        merged_results.append(result)
+    return merged_results

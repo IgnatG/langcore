@@ -403,7 +403,7 @@ class ParallelConsensusTest(absltest.TestCase):
         self.assertGreaterEqual(len(result.extractions), 2)
 
     def test_exception_in_one_model_propagates(self):
-        """If one model raises, the exception propagates."""
+        """If one model raises, the exception propagates (fail_fast=True default)."""
 
         def build_fn(model_id, **kwargs):
             if model_id == "model-b":
@@ -423,6 +423,357 @@ class ParallelConsensusTest(absltest.TestCase):
                 build_kwargs={},
                 annotate_kwargs={},
             )
+
+
+# ── 2.3: document_id forwarding tests ───────────────────────────
+
+
+class MergeDocumentIdTest(absltest.TestCase):
+    """Tests for document_id forwarding in merge_consensus_results."""
+
+    def test_explicit_document_id_forwarded(self):
+        """Explicit document_id kwarg is used in the merged result."""
+        doc_a = _make_doc([], text="text")
+        doc_b = _make_doc([], text="text")
+        result = _consensus.merge_consensus_results(
+            [doc_a, doc_b], text="text", document_id="my-doc-123"
+        )
+        self.assertEqual(result._document_id, "my-doc-123")
+
+    def test_inherits_first_result_document_id(self):
+        """Without explicit id, the first result's _document_id is used."""
+        doc_a = data.AnnotatedDocument(
+            document_id="first-doc", extractions=[], text="text"
+        )
+        doc_b = data.AnnotatedDocument(
+            document_id="second-doc", extractions=[], text="text"
+        )
+        result = _consensus.merge_consensus_results([doc_a, doc_b], text="text")
+        self.assertEqual(result._document_id, "first-doc")
+
+    def test_no_document_id_results_in_none_backing(self):
+        """When no document_id is supplied and results have none, _document_id is None."""
+        doc_a = _make_doc([], text="text")
+        doc_b = _make_doc([], text="text")
+        # _make_doc does not set _document_id so it's None
+        result = _consensus.merge_consensus_results([doc_a, doc_b], text="text")
+        # Accessing .document_id would auto-generate, but the backing field
+        # should be None (no explicit ID set).
+        self.assertIsNone(result._document_id)
+
+    def test_single_result_passthrough_preserves_id(self):
+        """Single-result short-circuit returns the original (with its id)."""
+        doc = data.AnnotatedDocument(
+            document_id="only-doc", extractions=[], text="text"
+        )
+        result = _consensus.merge_consensus_results([doc], text="text")
+        self.assertIs(result, doc)
+        self.assertEqual(result._document_id, "only-doc")
+
+    def test_empty_results_no_id(self):
+        result = _consensus.merge_consensus_results(
+            [], text="text", document_id="ignored"
+        )
+        # Empty results returns a bare AnnotatedDocument (no ID set)
+        self.assertIsNone(result.extractions)
+
+
+# ── 2.4: Graceful degradation tests ─────────────────────────────
+
+
+class GracefulDegradationSyncTest(absltest.TestCase):
+    """Tests for fail_fast=False in consensus_extract."""
+
+    def _make_mixed_build_fn(self, good_models, fail_models):
+        """Build fn where specific models fail with RuntimeError."""
+
+        def build_fn(model_id, **kwargs):
+            annotator = mock.MagicMock()
+            if model_id in fail_models:
+                annotator.annotate_text.side_effect = RuntimeError(f"{model_id} failed")
+            else:
+                ext = _make_extraction(
+                    "Person", "Alice", start=0, end=5, confidence=0.9
+                )
+                annotator.annotate_text.return_value = _make_doc([ext], text="text")
+            res = mock.MagicMock()
+            return ("", annotator, res, {})
+
+        return build_fn
+
+    def test_graceful_skips_failed_model(self):
+        """With fail_fast=False, one failing model is skipped."""
+        result = _consensus.consensus_extract(
+            text="text",
+            model_ids=["model-a", "model-b"],
+            build_components_fn=self._make_mixed_build_fn(
+                good_models={"model-a"}, fail_models={"model-b"}
+            ),
+            build_kwargs={},
+            annotate_kwargs={},
+            fail_fast=False,
+        )
+        # model-a succeeded → single-result passthrough
+        self.assertIsNotNone(result)
+        self.assertLen(result.extractions, 1)
+
+    def test_graceful_all_fail_raises(self):
+        """With fail_fast=False, if ALL models fail, RuntimeError is raised."""
+        with self.assertRaises(RuntimeError) as ctx:
+            _consensus.consensus_extract(
+                text="text",
+                model_ids=["model-a", "model-b"],
+                build_components_fn=self._make_mixed_build_fn(
+                    good_models=set(), fail_models={"model-a", "model-b"}
+                ),
+                build_kwargs={},
+                annotate_kwargs={},
+                fail_fast=False,
+            )
+        self.assertIn("All consensus models failed", str(ctx.exception))
+
+    def test_fail_fast_true_raises_immediately(self):
+        """With fail_fast=True (default), one failure raises immediately."""
+        with self.assertRaises(RuntimeError):
+            _consensus.consensus_extract(
+                text="text",
+                model_ids=["model-a", "model-b"],
+                build_components_fn=self._make_mixed_build_fn(
+                    good_models={"model-a"}, fail_models={"model-b"}
+                ),
+                build_kwargs={},
+                annotate_kwargs={},
+                fail_fast=True,
+            )
+
+    def test_graceful_two_of_three_succeed(self):
+        """Two successful models merge; one failing model is skipped."""
+
+        def build_fn(model_id, **kwargs):
+            annotator = mock.MagicMock()
+            if model_id == "model-c":
+                annotator.annotate_text.side_effect = RuntimeError("c failed")
+            else:
+                ext = _make_extraction(
+                    "Person", "Alice", start=0, end=5, confidence=1.0
+                )
+                annotator.annotate_text.return_value = _make_doc([ext], text="text")
+            res = mock.MagicMock()
+            return ("", annotator, res, {})
+
+        result = _consensus.consensus_extract(
+            text="text",
+            model_ids=["model-a", "model-b", "model-c"],
+            build_components_fn=build_fn,
+            build_kwargs={},
+            annotate_kwargs={},
+            fail_fast=False,
+        )
+        # Both successful models found the same extraction → merged
+        self.assertLen(result.extractions, 1)
+        # 2/2 agree (failed model excluded from denominator)
+        self.assertAlmostEqual(result.extractions[0].confidence_score, 1.0)
+
+
+class GracefulDegradationAsyncTest(absltest.TestCase):
+    """Tests for fail_fast=False in async_consensus_extract."""
+
+    def _make_mixed_build_fn(self, good_models, fail_models):
+        def build_fn(model_id, **kwargs):
+            annotator = mock.MagicMock()
+            if model_id in fail_models:
+                annotator.async_annotate_text = mock.AsyncMock(
+                    side_effect=RuntimeError(f"{model_id} failed")
+                )
+            else:
+                ext = _make_extraction(
+                    "Person", "Alice", start=0, end=5, confidence=0.9
+                )
+                annotator.async_annotate_text = mock.AsyncMock(
+                    return_value=_make_doc([ext], text="text")
+                )
+            res = mock.MagicMock()
+            return ("", annotator, res, {})
+
+        return build_fn
+
+    def test_async_graceful_skips_failed(self):
+        result = asyncio.run(
+            _consensus.async_consensus_extract(
+                text="text",
+                model_ids=["model-a", "model-b"],
+                build_components_fn=self._make_mixed_build_fn(
+                    good_models={"model-a"}, fail_models={"model-b"}
+                ),
+                build_kwargs={},
+                annotate_kwargs={},
+                fail_fast=False,
+            )
+        )
+        self.assertIsNotNone(result)
+        self.assertLen(result.extractions, 1)
+
+    def test_async_graceful_all_fail_raises(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            asyncio.run(
+                _consensus.async_consensus_extract(
+                    text="text",
+                    model_ids=["model-a", "model-b"],
+                    build_components_fn=self._make_mixed_build_fn(
+                        good_models=set(), fail_models={"model-a", "model-b"}
+                    ),
+                    build_kwargs={},
+                    annotate_kwargs={},
+                    fail_fast=False,
+                )
+            )
+        self.assertIn("All consensus models failed", str(ctx.exception))
+
+    def test_async_fail_fast_true_raises(self):
+        with self.assertRaises(RuntimeError):
+            asyncio.run(
+                _consensus.async_consensus_extract(
+                    text="text",
+                    model_ids=["model-a", "model-b"],
+                    build_components_fn=self._make_mixed_build_fn(
+                        good_models={"model-a"}, fail_models={"model-b"}
+                    ),
+                    build_kwargs={},
+                    annotate_kwargs={},
+                    fail_fast=True,
+                )
+            )
+
+
+# ── 2.2: Document list consensus tests ──────────────────────────
+
+
+class ConsensusExtractDocumentsTest(absltest.TestCase):
+    """Tests for consensus_extract_documents (Document list input)."""
+
+    def _make_mock_build_fn(
+        self,
+        results_by_model: dict[str, data.AnnotatedDocument],
+    ):
+        def build_fn(model_id, **kwargs):
+            annotator = mock.MagicMock()
+            annotator.annotate_text.return_value = results_by_model[model_id]
+            res = mock.MagicMock()
+            return (kwargs.get("text_or_documents", ""), annotator, res, {})
+
+        return build_fn
+
+    def test_processes_multiple_documents(self):
+        """Each document gets consensus extraction independently."""
+        ext = _make_extraction("Person", "Alice", start=0, end=5, confidence=0.9)
+        results = {
+            "model-a": _make_doc([ext], text="text"),
+            "model-b": _make_doc([ext], text="text"),
+        }
+        docs = [
+            data.Document(text="doc one text", document_id="doc-1"),
+            data.Document(text="doc two text", document_id="doc-2"),
+        ]
+        doc_results = _consensus.consensus_extract_documents(
+            documents=docs,
+            model_ids=["model-a", "model-b"],
+            build_components_fn=self._make_mock_build_fn(results),
+            build_kwargs={"text_or_documents": ""},
+            annotate_kwargs={},
+        )
+        self.assertLen(doc_results, 2)
+
+    def test_forwards_document_id(self):
+        """Each result preserves the original Document's document_id."""
+        ext = _make_extraction("Person", "Alice", start=0, end=5, confidence=0.9)
+        results = {
+            "model-a": _make_doc([ext], text="text"),
+            "model-b": _make_doc([ext], text="text"),
+        }
+        docs = [
+            data.Document(text="doc one", document_id="doc-1"),
+            data.Document(text="doc two", document_id="doc-2"),
+        ]
+        doc_results = _consensus.consensus_extract_documents(
+            documents=docs,
+            model_ids=["model-a", "model-b"],
+            build_components_fn=self._make_mock_build_fn(results),
+            build_kwargs={"text_or_documents": ""},
+            annotate_kwargs={},
+        )
+        self.assertEqual(doc_results[0]._document_id, "doc-1")
+        self.assertEqual(doc_results[1]._document_id, "doc-2")
+
+    def test_empty_documents_returns_empty(self):
+        results = _consensus.consensus_extract_documents(
+            documents=[],
+            model_ids=["model-a"],
+            build_components_fn=lambda **kw: None,
+            build_kwargs={},
+            annotate_kwargs={},
+        )
+        self.assertEmpty(results)
+
+
+class AsyncConsensusExtractDocumentsTest(absltest.TestCase):
+    """Tests for async_consensus_extract_documents."""
+
+    def _make_mock_build_fn(
+        self,
+        results_by_model: dict[str, data.AnnotatedDocument],
+    ):
+        def build_fn(model_id, **kwargs):
+            annotator = mock.MagicMock()
+            annotator.async_annotate_text = mock.AsyncMock(
+                return_value=results_by_model[model_id]
+            )
+            res = mock.MagicMock()
+            return (kwargs.get("text_or_documents", ""), annotator, res, {})
+
+        return build_fn
+
+    def test_async_processes_multiple_documents(self):
+        ext = _make_extraction("Person", "Alice", start=0, end=5, confidence=0.9)
+        results = {
+            "model-a": _make_doc([ext], text="text"),
+            "model-b": _make_doc([ext], text="text"),
+        }
+        docs = [
+            data.Document(text="doc one", document_id="doc-1"),
+            data.Document(text="doc two", document_id="doc-2"),
+        ]
+        doc_results = asyncio.run(
+            _consensus.async_consensus_extract_documents(
+                documents=docs,
+                model_ids=["model-a", "model-b"],
+                build_components_fn=self._make_mock_build_fn(results),
+                build_kwargs={"text_or_documents": ""},
+                annotate_kwargs={},
+            )
+        )
+        self.assertLen(doc_results, 2)
+
+    def test_async_forwards_document_id(self):
+        ext = _make_extraction("Person", "Alice", start=0, end=5, confidence=0.9)
+        results = {
+            "model-a": _make_doc([ext], text="text"),
+            "model-b": _make_doc([ext], text="text"),
+        }
+        docs = [
+            data.Document(text="doc one", document_id="d-1"),
+            data.Document(text="doc two", document_id="d-2"),
+        ]
+        doc_results = asyncio.run(
+            _consensus.async_consensus_extract_documents(
+                documents=docs,
+                model_ids=["model-a", "model-b"],
+                build_components_fn=self._make_mock_build_fn(results),
+                build_kwargs={"text_or_documents": ""},
+                annotate_kwargs={},
+            )
+        )
+        self.assertEqual(doc_results[0]._document_id, "d-1")
+        self.assertEqual(doc_results[1]._document_id, "d-2")
 
 
 if __name__ == "__main__":

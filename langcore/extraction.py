@@ -520,11 +520,7 @@ def extract(
         effective_retries = _resolve_retry_count(schema_validation_retries, schema)
 
         # ── Multi-model consensus path ───────────────────────────────
-        if (
-            consensus_models
-            and len(consensus_models) > 1
-            and isinstance(text_or_documents, str)
-        ):
+        if consensus_models and len(consensus_models) > 1:
             _consensus_build_kwargs: dict[str, typing.Any] = {
                 "text_or_documents": text_or_documents,
                 "prompt_description": prompt_description,
@@ -565,6 +561,45 @@ def extract(
                 "max_workers": max_workers,
                 "tokenizer": tokenizer,
             }
+
+            # Document list consensus
+            if not isinstance(text_or_documents, str):
+                doc_results = _consensus.consensus_extract_documents(
+                    documents=text_or_documents,
+                    model_ids=consensus_models,
+                    build_components_fn=_build_extraction_components,
+                    build_kwargs=_consensus_build_kwargs,
+                    annotate_kwargs=_consensus_annotate_kwargs,
+                )
+                for doc_result in doc_results:
+                    if schema is not None and effective_retries > 0:
+                        doc_result = _pydantic_validation.pydantic_retry(
+                            doc_result,
+                            schema,
+                            annotator,
+                            res,
+                            max_char_buffer=max_char_buffer,
+                            batch_length=batch_length,
+                            additional_context=additional_context,
+                            debug=debug,
+                            extraction_passes=extraction_passes,
+                            context_window_chars=context_window_chars,
+                            show_progress=show_progress,
+                            max_workers=max_workers,
+                            tokenizer=tokenizer,
+                            alignment_kwargs=alignment_kwargs,
+                            hooks=_hooks,
+                            max_retries=effective_retries,
+                        )
+                    _compute_reliability(
+                        doc_result,
+                        schema=schema,
+                        reliability_config=reliability_config,
+                    )
+                _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, doc_results)
+                return doc_results
+
+            # String consensus
             result = _consensus.consensus_extract(
                 text=text_or_documents,
                 model_ids=consensus_models,
@@ -851,11 +886,7 @@ async def async_extract(
         effective_retries = _resolve_retry_count(schema_validation_retries, schema)
 
         # ── Multi-model consensus path ───────────────────────────────
-        if (
-            consensus_models
-            and len(consensus_models) > 1
-            and isinstance(text_or_documents, str)
-        ):
+        if consensus_models and len(consensus_models) > 1:
             _consensus_build_kwargs: dict[str, typing.Any] = {
                 "text_or_documents": text_or_documents,
                 "prompt_description": prompt_description,
@@ -896,6 +927,47 @@ async def async_extract(
                 "max_workers": max_workers,
                 "tokenizer": tokenizer,
             }
+
+            # Document list consensus
+            if not isinstance(text_or_documents, str):
+                doc_results = await _consensus.async_consensus_extract_documents(
+                    documents=text_or_documents,
+                    model_ids=consensus_models,
+                    build_components_fn=_build_extraction_components,
+                    build_kwargs=_consensus_build_kwargs,
+                    annotate_kwargs=_consensus_annotate_kwargs,
+                )
+                for doc_result in doc_results:
+                    if schema is not None and effective_retries > 0:
+                        doc_result = await _pydantic_validation.async_pydantic_retry(
+                            doc_result,
+                            schema,
+                            annotator,
+                            res,
+                            max_char_buffer=max_char_buffer,
+                            batch_length=batch_length,
+                            additional_context=additional_context,
+                            debug=debug,
+                            extraction_passes=extraction_passes,
+                            context_window_chars=context_window_chars,
+                            show_progress=show_progress,
+                            max_workers=max_workers,
+                            tokenizer=tokenizer,
+                            alignment_kwargs=alignment_kwargs,
+                            hooks=_hooks,
+                            max_retries=effective_retries,
+                        )
+                    _compute_reliability(
+                        doc_result,
+                        schema=schema,
+                        reliability_config=reliability_config,
+                    )
+                await _hooks.async_emit(
+                    hooks_lib.HookName.EXTRACTION_COMPLETE, doc_results
+                )
+                return doc_results
+
+            # String consensus
             result = await _consensus.async_consensus_extract(
                 text=text_or_documents,
                 model_ids=consensus_models,
@@ -987,25 +1059,25 @@ async def async_extract(
             if schema is not None and effective_retries > 0:
                 for i, doc in enumerate(result_list):
                     if doc.text is not None:
-                        result_list[
-                            i
-                        ] = await _pydantic_validation.async_pydantic_retry(
-                            doc,
-                            schema,
-                            annotator,
-                            res,
-                            max_char_buffer=max_char_buffer,
-                            batch_length=batch_length,
-                            additional_context=additional_context,
-                            debug=debug,
-                            extraction_passes=extraction_passes,
-                            context_window_chars=context_window_chars,
-                            show_progress=show_progress,
-                            max_workers=max_workers,
-                            tokenizer=tokenizer,
-                            alignment_kwargs=alignment_kwargs,
-                            hooks=_hooks,
-                            max_retries=effective_retries,
+                        result_list[i] = (
+                            await _pydantic_validation.async_pydantic_retry(
+                                doc,
+                                schema,
+                                annotator,
+                                res,
+                                max_char_buffer=max_char_buffer,
+                                batch_length=batch_length,
+                                additional_context=additional_context,
+                                debug=debug,
+                                extraction_passes=extraction_passes,
+                                context_window_chars=context_window_chars,
+                                show_progress=show_progress,
+                                max_workers=max_workers,
+                                tokenizer=tokenizer,
+                                alignment_kwargs=alignment_kwargs,
+                                hooks=_hooks,
+                                max_retries=effective_retries,
+                            )
                         )
             for doc in result_list:
                 _compute_reliability(
