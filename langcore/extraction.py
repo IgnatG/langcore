@@ -11,6 +11,7 @@ import pydantic
 
 from langcore import (
     _config,
+    _pydantic_validation,
     annotation,
     factory,
     io,
@@ -253,6 +254,7 @@ def extract(
     tokenizer: tokenizer_lib.Tokenizer | None = None,
     hooks: hooks_lib.Hooks | None = None,
     optimized_config: typing.Any = None,
+    schema_validation_retries: int = 0,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Extracts structured information from text.
 
@@ -359,6 +361,11 @@ def extract(
           ``langcore-dspy``.  When provided, its
           ``prompt_description`` and ``examples`` override the
           corresponding parameters.
+        schema_validation_retries: Number of retry attempts when Pydantic
+          schema validation fails (Instructor pattern). Only effective when
+          ``schema`` is provided and the input is a string. Each retry
+          re-prompts the LLM with validation error feedback. Defaults to 0
+          (disabled). Set to 1 or higher to enable.
 
     Returns:
         An AnnotatedDocument with the extracted information when input is a
@@ -443,6 +450,25 @@ def extract(
                 tokenizer=tokenizer,
                 **alignment_kwargs,
             )
+            if schema is not None and schema_validation_retries > 0:
+                result = _pydantic_validation.pydantic_retry(
+                    result,
+                    schema,
+                    annotator,
+                    res,
+                    max_char_buffer=max_char_buffer,
+                    batch_length=batch_length,
+                    additional_context=additional_context,
+                    debug=debug,
+                    extraction_passes=extraction_passes,
+                    context_window_chars=context_window_chars,
+                    show_progress=show_progress,
+                    max_workers=max_workers,
+                    tokenizer=tokenizer,
+                    alignment_kwargs=alignment_kwargs,
+                    hooks=_hooks,
+                    max_retries=schema_validation_retries,
+                )
             _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
         else:
@@ -499,6 +525,7 @@ async def async_extract(
     tokenizer: tokenizer_lib.Tokenizer | None = None,
     hooks: hooks_lib.Hooks | None = None,
     optimized_config: typing.Any = None,
+    schema_validation_retries: int = 0,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Async version of ``extract`` for non-blocking LLM inference.
 
@@ -547,6 +574,11 @@ async def async_extract(
         ``langcore-dspy``.  When provided, its
         ``prompt_description`` and ``examples`` override the
         corresponding parameters.
+      schema_validation_retries: Number of Pydantic schema validation
+        retry attempts.  Only applies when ``schema`` is provided.
+        After extraction, each result is validated against the schema;
+        failures trigger a re-extraction with validation feedback.
+        Defaults to ``0`` (no validation retries).
 
     Returns:
       AnnotatedDocument (string input) or list of AnnotatedDocuments.
@@ -623,6 +655,25 @@ async def async_extract(
                 tokenizer=tokenizer,
                 **alignment_kwargs,
             )
+            if schema is not None and schema_validation_retries > 0:
+                result = await _pydantic_validation.async_pydantic_retry(
+                    result,
+                    schema,
+                    annotator,
+                    res,
+                    max_char_buffer=max_char_buffer,
+                    batch_length=batch_length,
+                    additional_context=additional_context,
+                    debug=debug,
+                    extraction_passes=extraction_passes,
+                    context_window_chars=context_window_chars,
+                    show_progress=show_progress,
+                    max_workers=max_workers,
+                    tokenizer=tokenizer,
+                    alignment_kwargs=alignment_kwargs,
+                    hooks=_hooks,
+                    max_retries=schema_validation_retries,
+                )
             await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
         else:

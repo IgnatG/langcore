@@ -73,6 +73,7 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | Feature | LangCore | LangStruct | Instructor | Guardrails AI |
 |---|---|---|---|---|
 | **Pydantic schema extraction** | ✅ `schema=MyModel` with auto-prompt generation | ✅ Native | ✅ Native response model | ⚠️ Via Pydantic integration |
+| **Schema validation retry** | ✅ `schema_validation_retries=N` — validate → re-ask loop | ❌ | ✅ Auto retry on Pydantic failure | ⚠️ Via Guard wrapping |
 | **Few-shot examples** | ✅ `ExampleData` with text + extractions | ⚠️ Limited | ❌ | ❌ |
 | **Pydantic ↔ ExampleData bridge** | ✅ `to_pydantic()` / `schema_from_pydantic()` | ❌ | N/A | N/A |
 | **Schema from dict** | ✅ `schema_from_example({"key": "val"})` | ❌ | ❌ | ❌ |
@@ -341,6 +342,21 @@ result = lx.extract(
 > **Tip:** Use `lx.schema_from_pydantic(Invoice)` to inspect the auto-generated prompt and JSON schema before running extraction. Use `lx.schema_from_example({"name": "John", "age": 30})` to auto-generate a Pydantic model from a plain dict, or `lx.schema_from_examples([{"name": "John"}, {"name": "Jane", "age": 30}])` to merge multiple examples (fields default to optional when absent from some examples).
 
 > **Under the hood:** The `PydanticSchemaAdapter` converts your Pydantic model into LangCore's internal `SchemaConfig` — auto-generating the prompt description, JSON schema, and seed examples. You can use it directly for advanced scenarios: `from langcore.pydantic_schema import PydanticSchemaAdapter`.
+
+#### Schema Validation Retries
+
+When using Pydantic schema mode, you can enable automatic validation retries with `schema_validation_retries`. After extraction, each result is validated against the schema. Extractions that fail validation trigger a re-extraction with the validation error feedback, following the Instructor-style "validate → re-ask" pattern:
+
+```python
+result = lx.extract(
+    text="Invoice INV-2024-789 for $3,450 is due April 20th, 2024",
+    schema=Invoice,
+    model_id="gemini-2.5-flash",
+    schema_validation_retries=2,  # Up to 2 retry attempts
+)
+```
+
+Valid extractions from the first pass are always preserved — only invalid ones are retried. The correction prompt includes the specific Pydantic validation errors so the LLM can fix them.
 
 ### Confidence Scoring
 
