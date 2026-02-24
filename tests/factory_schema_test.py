@@ -102,9 +102,7 @@ class FactorySchemaIntegrationTest(absltest.TestCase):
         config = factory.ModelConfig(model_id="test-model")
 
         with (
-            mock.patch(
-                "langcore.providers.router.resolve", return_value=NoSchemaModel
-            ),
+            mock.patch("langcore.providers.router.resolve", return_value=NoSchemaModel),
             mock.patch.object(NoSchemaModel, "__init__", return_value=None),
         ):
             model = factory._create_model_with_schema(

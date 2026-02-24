@@ -9,7 +9,15 @@ from typing import cast
 
 import pydantic
 
-from langcore import annotation, factory, io, prompting, resolver, schema_adapter
+from langcore import (
+    _config,
+    annotation,
+    factory,
+    io,
+    prompting,
+    resolver,
+    schema_adapter,
+)
 from langcore import hooks as hooks_lib
 from langcore import prompt_validation as pv
 from langcore.core import base_model, data
@@ -166,14 +174,19 @@ def _build_extraction_components(
             fence_output=fence_output,
         )
 
-    format_handler, remaining_params = fh.FormatHandler.from_resolver_params(
-        resolver_params=resolver_params,
-        base_format_type=format_type,
-        base_use_fences=language_model.requires_fence_output,
-        base_attribute_suffix=data.ATTRIBUTE_SUFFIX,
-        base_use_wrapper=True,
-        base_wrapper_key=data.EXTRACTIONS_KEY,
-    )
+    # Build FormatHandler from resolver_params or defaults.
+    rp = dict(resolver_params or {})
+    if rp.get("format_handler") is not None:
+        format_handler = rp.pop("format_handler")
+    else:
+        format_handler = fh.FormatHandler(
+            format_type=format_type,
+            use_fences=language_model.requires_fence_output,
+            attribute_suffix=data.ATTRIBUTE_SUFFIX,
+            use_wrapper=True,
+            wrapper_key=data.EXTRACTIONS_KEY,
+        )
+    remaining_params = rp
 
     if language_model.schema is not None:
         language_model.schema.validate_format(format_handler)
@@ -363,7 +376,7 @@ def extract(
         prompt_description = optimized_config.prompt_description
         examples = optimized_config.examples
 
-    _hooks = hooks or hooks_lib.Hooks()
+    _hooks = _config.resolve_hooks(hooks)
 
     try:
         text_or_documents, annotator, res, alignment_kwargs = (
@@ -543,7 +556,7 @@ async def async_extract(
         prompt_description = optimized_config.prompt_description
         examples = optimized_config.examples
 
-    _hooks = hooks or hooks_lib.Hooks()
+    _hooks = _config.resolve_hooks(hooks)
 
     try:
         text_or_documents, annotator, res, alignment_kwargs = (

@@ -19,7 +19,7 @@ from absl import logging
 from rapidfuzz import fuzz as rapidfuzz_fuzz
 from rapidfuzz.distance import Indel as rapidfuzz_indel
 
-from langcore.core import data, exceptions, schema
+from langcore.core import data, exceptions, types
 from langcore.core import format_handler as fh
 from langcore.core import tokenizer as tokenizer_lib
 
@@ -59,7 +59,7 @@ class AbstractResolver(abc.ABC):
     def __init__(
         self,
         fence_output: bool = True,
-        constraint: schema.Constraint = schema.Constraint(),
+        constraint: types.Constraint = types.Constraint(),
         format_type: data.FormatType = data.FormatType.JSON,
     ):
         """Initializes the BaseResolver.
@@ -184,7 +184,7 @@ class Resolver(AbstractResolver):
         self,
         format_handler: fh.FormatHandler | None = None,
         extraction_index_suffix: str | None = None,
-        constraint: schema.Constraint | None = None,
+        constraint: types.Constraint | None = None,
     ):
         """Constructor.
 
@@ -197,7 +197,7 @@ class Resolver(AbstractResolver):
         if format_handler is None:
             format_handler = fh.FormatHandler()
 
-        constraint = constraint or schema.Constraint()
+        constraint = constraint or types.Constraint()
         super().__init__(
             fence_output=format_handler.use_fences,
             format_type=format_handler.format_type,
@@ -231,7 +231,7 @@ class Resolver(AbstractResolver):
         logging.debug("Input Text: %s", input_text)
 
         try:
-            constraint = getattr(self, "_constraint", schema.Constraint())
+            constraint = getattr(self, "_constraint", types.Constraint())
             strict = getattr(constraint, "strict", False)
             extraction_data = self.format_handler.parse_output(
                 input_text, strict=strict

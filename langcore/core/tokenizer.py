@@ -506,16 +506,16 @@ def _is_end_of_sentence_token(
       True if the token at `current_idx` ends a sentence, otherwise False.
     """
     current_token_text = text[
-        tokens[current_idx]
-        .char_interval.start_pos : tokens[current_idx]
-        .char_interval.end_pos
+        tokens[current_idx].char_interval.start_pos : tokens[
+            current_idx
+        ].char_interval.end_pos
     ]
     if _END_OF_SENTENCE_PATTERN.search(current_token_text):
         if current_idx > 0:
             prev_token_text = text[
-                tokens[current_idx - 1]
-                .char_interval.start_pos : tokens[current_idx - 1]
-                .char_interval.end_pos
+                tokens[current_idx - 1].char_interval.start_pos : tokens[
+                    current_idx - 1
+                ].char_interval.end_pos
             ]
             if f"{prev_token_text}{current_token_text}" in known_abbreviations:
                 return False
@@ -605,9 +605,9 @@ def find_sentence_range(
                 # Consume any trailing closing punctuation (e.g. quotes, parens)
                 while end_index < len(tokens):
                     next_token_text = text[
-                        tokens[end_index]
-                        .char_interval.start_pos : tokens[end_index]
-                        .char_interval.end_pos
+                        tokens[end_index].char_interval.start_pos : tokens[
+                            end_index
+                        ].char_interval.end_pos
                     ]
                     if (
                         tokens[end_index].token_type == TokenType.PUNCTUATION

@@ -93,6 +93,7 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | Feature | LangCore | LangStruct | Instructor | Guardrails AI |
 |---|---|---|---|---|
 | **Event hook system** | ✅ 6 lifecycle events via `Hooks` class | ❌ | ✅ `completion:kwargs`, `parse:error` etc. | ❌ |
+| **Global hooks** | ✅ `lx.configure(hooks=...)` | ❌ | ❌ | ❌ |
 | **Hook composition** | ✅ Merge with `hooks_a + hooks_b` | ❌ | ❌ | ❌ |
 | **Fault-tolerant callbacks** | ✅ Exceptions logged & swallowed | ❌ | ❌ | ❌ |
 | **Token usage tracking** | ⚠️ Via API layer | ❌ | ✅ `response.usage` | ❌ |
@@ -429,6 +430,31 @@ hooks.clear()
 
 Callbacks are **fault-tolerant**: if a handler raises an exception it is logged
 and swallowed so it never breaks the extraction pipeline.
+
+**Global hooks via `lx.configure()`** — set hooks once and they apply to every
+`extract()` / `async_extract()` call without passing `hooks=` each time:
+
+```python
+import langcore as lx
+from langcore.hooks import Hooks, HookName
+
+# Set up global observability hooks once at startup
+global_hooks = Hooks()
+global_hooks.on(HookName.EXTRACTION_START, lambda cfg: print("Starting:", cfg["model_id"]))
+global_hooks.on(HookName.EXTRACTION_ERROR, lambda err: alert_team(err))
+lx.configure(hooks=global_hooks)
+
+# Every extract() call now emits to global hooks automatically
+result = lx.extract(text="...", examples=[...])
+
+# Per-call hooks still work and fire AFTER global hooks
+per_call = Hooks().on(HookName.EXTRACTION_COMPLETE, lambda r: log_result(r))
+result = lx.extract(text="...", examples=[...], hooks=per_call)
+
+# Inspect or reset global config
+lx.get_config()   # {"hooks": <Hooks instance>}
+lx.reset()         # Clears all global configuration
+```
 
 ### Quality Metrics & Evaluation
 
