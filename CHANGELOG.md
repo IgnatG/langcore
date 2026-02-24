@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.3 (2026-02-24)
+
+### Bug Fixes
+
+- Update resolver initialization to use format_handler and improve caching in various components
+  ([`fa9cac2`](https://github.com/IgnatG/langcore/commit/fa9cac242e607b36a9626c40433133ab1d02541d))
+
+
 ## v1.1.2 (2026-02-24)
 
 ### Bug Fixes
