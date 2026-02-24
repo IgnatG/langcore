@@ -74,6 +74,11 @@ class Extraction:
         cross-pass appearance frequency is further combined with the
         per-extraction alignment confidence.  ``None`` when confidence
         has not been computed.
+      reliability_score: Composite reliability score in ``[0.0, 1.0]``
+        that combines multiple quality signals: confidence, schema
+        validity, field completeness, and source grounding.  Computed
+        by ``compute_reliability_scores()`` (see ``reliability.py``).
+        ``None`` when reliability has not been computed.
       token_interval: The token interval of the extraction.
     """
 
@@ -86,6 +91,7 @@ class Extraction:
     description: str | None = None
     attributes: dict[str, str | list[str]] | None = None
     confidence_score: float | None = None
+    reliability_score: float | None = None
     _token_interval: tokenizer.TokenInterval | None = dataclasses.field(
         default=None, repr=False, compare=False
     )
@@ -103,6 +109,7 @@ class Extraction:
         description: str | None = None,
         attributes: dict[str, str | list[str]] | None = None,
         confidence_score: float | None = None,
+        reliability_score: float | None = None,
     ):
         self.extraction_class = extraction_class
         self.extraction_text = extraction_text
@@ -114,6 +121,7 @@ class Extraction:
         self.description = description
         self.attributes = attributes
         self.confidence_score = confidence_score
+        self.reliability_score = reliability_score
 
     @property
     def token_interval(self) -> tokenizer.TokenInterval | None:
@@ -251,6 +259,25 @@ class AnnotatedDocument:
             e.confidence_score
             for e in self.extractions
             if e.confidence_score is not None
+        ]
+        if not scores:
+            return None
+        return round(sum(scores) / len(scores), 4)
+
+    @property
+    def average_reliability(self) -> float | None:
+        """Compute the mean reliability score across all extractions.
+
+        Returns ``None`` when no extractions exist or none of them have
+        a ``reliability_score`` set.  Otherwise returns the arithmetic
+        mean of the non-null scores.
+        """
+        if not self.extractions:
+            return None
+        scores = [
+            e.reliability_score
+            for e in self.extractions
+            if e.reliability_score is not None
         ]
         if not scores:
             return None

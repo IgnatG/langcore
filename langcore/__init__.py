@@ -17,6 +17,7 @@ from langcore import visualization
 from langcore.extraction import async_extract as async_extract_func
 from langcore.extraction import extract as extract_func
 from langcore.hooks import Hooks
+from langcore.reliability import ReliabilityConfig
 from langcore.schema_adapter import schema_from_pydantic
 from langcore.schema_generator import schema_from_example, schema_from_examples
 
@@ -38,6 +39,7 @@ _LAZY_MODULES = {
     "progress": "langcore.progress",
     "prompting": "langcore.prompting",
     "providers": "langcore.providers",
+    "reliability": "langcore.reliability",
     "resolver": "langcore.resolver",
     "schema": "langcore.core.schema",
     "schema_adapter": "langcore.schema_adapter",
@@ -50,6 +52,7 @@ _LAZY_MODULES = {
 
 __all__ = [
     # Public convenience functions
+    "ReliabilityConfig",
     "async_extract",
     "configure",
     "evaluate",

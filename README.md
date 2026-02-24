@@ -15,6 +15,7 @@
 - [Quick Start](#quick-start)
 - [Schema-First Extraction with Pydantic](#schema-first-extraction-with-pydantic)
 - [Confidence Scoring](#confidence-scoring)
+- [Extraction Reliability Score](#extraction-reliability-score)
 - [Extraction Hooks & Events](#extraction-hooks--events)
 - [Quality Metrics & Evaluation](#quality-metrics--evaluation)
 - [Installation](#installation)
@@ -36,6 +37,7 @@ LangCore extends Google's LangCore with the following features:
 |---|---|
 | **Pydantic Schema Extraction** | Define extraction targets as Pydantic models with auto-generated prompts and JSON schema constraints (`schema_adapter`, `schema_generator`) |
 | **Confidence Scoring** | Per-extraction confidence (0.0–1.0) combining alignment quality + token overlap, with configurable weights |
+| **Extraction Reliability Score** | Composite quality metric (0.0–1.0) combining confidence, schema validity, field completeness, and source grounding — configurable via `ReliabilityConfig` |
 | **Extraction Hooks & Events** | 6 lifecycle events (`extraction:start`, `chunk`, `llm_call`, `alignment`, `complete`, `error`) with fault-tolerant callbacks |
 | **Quality Metrics & Evaluation** | Built-in P/R/F1/accuracy metrics with per-field and per-document breakdown |
 | **Multi-pass Confidence** | Cross-pass frequency augmentation for higher-confidence extractions |
@@ -85,7 +87,9 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | Feature | LangCore | LangStruct | Instructor | Guardrails AI |
 |---|---|---|---|---|
 | **Confidence scoring** | ✅ Per-extraction (alignment quality + token overlap) | ❌ | ❌ | ❌ |
+| **Reliability scoring** | ✅ Composite metric (confidence + schema validity + completeness + grounding) | ❌ | ❌ | ❌ |
 | **Document-level confidence** | ✅ `result.average_confidence` | ❌ | ❌ | ❌ |
+| **Document-level reliability** | ✅ `result.average_reliability` | ❌ | ❌ | ❌ |
 | **Multi-pass confidence boost** | ✅ Cross-pass frequency augmentation | ❌ | ❌ | ❌ |
 | **Prompt alignment validation** | ✅ Warnings for non-verbatim examples | ❌ | ❌ | ❌ |
 
@@ -387,6 +391,54 @@ print(f"Average confidence: {result.average_confidence}")
 ```
 
 For **multi-pass extraction**, confidence is further augmented by cross-pass appearance frequency — extractions confirmed across multiple passes receive higher scores (`cross_pass_ratio × alignment_confidence`).
+
+### Extraction Reliability Score
+
+While `confidence_score` measures alignment quality, the **reliability score** is a composite metric that combines multiple quality signals into a single `reliability_score` (0.0–1.0) per extraction:
+
+| Signal | Default Weight | What it measures |
+|--------|---------------|-----------------|
+| **Confidence** | 40% | Alignment-based `confidence_score` |
+| **Schema validity** | 20% | Does the extraction pass Pydantic validation? |
+| **Field completeness** | 20% | Are all required schema fields non-empty? |
+| **Source grounding** | 20% | Does the extraction have a valid `char_interval`? |
+
+Reliability scoring is **automatic** — every call to `extract()` computes it. When a `schema` is provided, the schema validity and field completeness signals are evaluated against it; otherwise they default to 1.0 (neutral).
+
+```python
+import langcore as lx
+from pydantic import BaseModel
+
+class Invoice(BaseModel):
+    text: str
+    amount: float
+    currency: str = "USD"
+
+result = lx.extract(text, schema=Invoice, model_id="gemini-2.5-flash")
+
+for ext in result.extractions:
+    print(f"{ext.extraction_text}: reliability={ext.reliability_score:.2f}")
+
+# Document-level average reliability
+print(f"Average reliability: {result.average_reliability}")
+```
+
+**Custom weights** — pass a `ReliabilityConfig` to tune the balance:
+
+```python
+from langcore import ReliabilityConfig
+
+# Emphasise confidence and grounding, ignore schema signals
+config = ReliabilityConfig(
+    w_confidence=0.6,
+    w_schema_valid=0.0,
+    w_completeness=0.0,
+    w_grounding=0.4,
+)
+result = lx.extract(text, schema=Invoice, reliability_config=config)
+```
+
+To disable reliability scoring entirely, pass `reliability_config=False`.
 
 ### Extraction Hooks & Events
 

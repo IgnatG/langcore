@@ -21,6 +21,9 @@ from langcore import (
 )
 from langcore import hooks as hooks_lib
 from langcore import prompt_validation as pv
+from langcore import (
+    reliability as reliability_mod,
+)
 from langcore.core import base_model, data
 from langcore.core import format_handler as fh
 from langcore.core import tokenizer as tokenizer_lib
@@ -223,6 +226,23 @@ def _build_extraction_components(
     return (text_or_documents, annotator_inst, res, alignment_kwargs)
 
 
+def _compute_reliability(
+    result: data.AnnotatedDocument,
+    *,
+    schema: type[pydantic.BaseModel] | None,
+    reliability_config: reliability_mod.ReliabilityConfig | bool,
+) -> None:
+    """Compute reliability scores on *result* if configured."""
+    if reliability_config is False:
+        return
+    cfg = (
+        reliability_config
+        if isinstance(reliability_config, reliability_mod.ReliabilityConfig)
+        else None
+    )
+    reliability_mod.compute_reliability_scores(result, schema=schema, config=cfg)
+
+
 def extract(
     text_or_documents: typing.Any,
     prompt_description: str | None = None,
@@ -255,6 +275,7 @@ def extract(
     hooks: hooks_lib.Hooks | None = None,
     optimized_config: typing.Any = None,
     schema_validation_retries: int = 0,
+    reliability_config: reliability_mod.ReliabilityConfig | bool = True,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Extracts structured information from text.
 
@@ -366,6 +387,11 @@ def extract(
           ``schema`` is provided and the input is a string. Each retry
           re-prompts the LLM with validation error feedback. Defaults to 0
           (disabled). Set to 1 or higher to enable.
+        reliability_config: Controls composite reliability scoring.
+          When ``True`` (default), reliability scores are computed using
+          default ``ReliabilityConfig`` weights.  Pass a
+          ``ReliabilityConfig`` instance to customise weights.  Set to
+          ``False`` to skip reliability scoring entirely.
 
     Returns:
         An AnnotatedDocument with the extracted information when input is a
@@ -469,6 +495,9 @@ def extract(
                     hooks=_hooks,
                     max_retries=schema_validation_retries,
                 )
+            _compute_reliability(
+                result, schema=schema, reliability_config=reliability_config
+            )
             _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
         else:
@@ -487,6 +516,10 @@ def extract(
                 **alignment_kwargs,
             )
             result_list = list(result)
+            for doc in result_list:
+                _compute_reliability(
+                    doc, schema=schema, reliability_config=reliability_config
+                )
             _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result_list)
             return result_list
     except Exception as exc:
@@ -526,6 +559,7 @@ async def async_extract(
     hooks: hooks_lib.Hooks | None = None,
     optimized_config: typing.Any = None,
     schema_validation_retries: int = 0,
+    reliability_config: reliability_mod.ReliabilityConfig | bool = True,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Async version of ``extract`` for non-blocking LLM inference.
 
@@ -579,6 +613,11 @@ async def async_extract(
         After extraction, each result is validated against the schema;
         failures trigger a re-extraction with validation feedback.
         Defaults to ``0`` (no validation retries).
+      reliability_config: Controls composite reliability scoring.
+        When ``True`` (default), reliability scores are computed using
+        default ``ReliabilityConfig`` weights.  Pass a
+        ``ReliabilityConfig`` instance to customise weights.  Set to
+        ``False`` to skip reliability scoring entirely.
 
     Returns:
       AnnotatedDocument (string input) or list of AnnotatedDocuments.
@@ -674,6 +713,9 @@ async def async_extract(
                     hooks=_hooks,
                     max_retries=schema_validation_retries,
                 )
+            _compute_reliability(
+                result, schema=schema, reliability_config=reliability_config
+            )
             await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
         else:
@@ -691,6 +733,10 @@ async def async_extract(
                 tokenizer=tokenizer,
                 **alignment_kwargs,
             )
+            for doc in result:
+                _compute_reliability(
+                    doc, schema=schema, reliability_config=reliability_config
+                )
             await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
             return result
     except Exception as exc:
