@@ -11,6 +11,7 @@ import pydantic
 
 from langcore import (
     _config,
+    _consensus,
     _pydantic_validation,
     annotation,
     factory,
@@ -296,6 +297,7 @@ def extract(
     optimized_config: typing.Any = None,
     schema_validation_retries: int | typing.Any = _UNSET,
     reliability_config: reliability_mod.ReliabilityConfig | bool = True,
+    consensus_models: list[str] | None = None,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Extracts structured information from text.
 
@@ -414,6 +416,38 @@ def extract(
           default ``ReliabilityConfig`` weights.  Pass a
           ``ReliabilityConfig`` instance to customise weights.  Set to
           ``False`` to skip reliability scoring entirely.
+        consensus_models: Optional list of model IDs for multi-model
+          consensus extraction.  When provided, extraction is run
+          independently with each model and results are merged using
+          overlap-aware deduplication.  Extractions confirmed by
+          multiple models receive higher confidence scores
+          (``agreement_ratio x alignment_confidence``).  Each
+          extraction is tagged with ``_consensus_model_id`` in its
+          attributes.  Falls back to single-model when only one model
+          is in the list.  Only supported for string input (not
+          Document lists).
+
+          Each string in the list is resolved through the same
+          provider router used by ``model_id``, so any model
+          identifier accepted by ``extract()`` works here too:
+
+          - **Gemini** (built-in): ``"gemini-2.5-flash"``,
+            ``"gemini-2.5-pro"``, ``"gemini-2.0-flash"``
+          - **OpenAI** (built-in): ``"gpt-4o"``, ``"gpt-4o-mini"``,
+            ``"gpt-4-turbo"``
+          - **Ollama** (built-in): ``"llama3.2:1b"``,
+            ``"mistral:7b"``, ``"qwen2.5:72b"``
+          - **LiteLLM** (via ``langcore-litellm`` plugin):
+            ``"litellm/anthropic/claude-sonnet-4"``,
+            ``"litellm/gpt-4o"``,
+            ``"litellm/ollama/llama3"``,
+            ``"litellm/bedrock/anthropic.claude-3"``
+          - **Custom providers**: any model ID matched by a
+            registered ``langcore.providers`` entry-point plugin.
+
+          You can freely mix providers in a single list, e.g.
+          ``["gemini-2.5-flash", "gpt-4o",
+          "litellm/anthropic/claude-sonnet-4"]``.
 
     Returns:
         An AnnotatedDocument with the extracted information when input is a
@@ -485,6 +519,85 @@ def extract(
 
         effective_retries = _resolve_retry_count(schema_validation_retries, schema)
 
+        # ── Multi-model consensus path ───────────────────────────────
+        if (
+            consensus_models
+            and len(consensus_models) > 1
+            and isinstance(text_or_documents, str)
+        ):
+            _consensus_build_kwargs: dict[str, typing.Any] = {
+                "text_or_documents": text_or_documents,
+                "prompt_description": prompt_description,
+                "examples": examples,
+                "api_key": api_key,
+                "format_type": format_type,
+                "max_char_buffer": max_char_buffer,
+                "temperature": temperature,
+                "fence_output": fence_output,
+                "use_schema_constraints": use_schema_constraints,
+                "batch_length": batch_length,
+                "max_workers": max_workers,
+                "additional_context": additional_context,
+                "resolver_params": resolver_params,
+                "language_model_params": language_model_params,
+                "debug": debug,
+                "model_url": model_url,
+                "extraction_passes": extraction_passes,
+                "context_window_chars": context_window_chars,
+                "config": None,  # each model built independently
+                "model": None,
+                "fetch_urls": False,  # already fetched above
+                "prompt_validation_level": pv.PromptValidationLevel.OFF,
+                "prompt_validation_strict": False,
+                "show_progress": show_progress,
+                "tokenizer": tokenizer,
+                "schema": schema,
+                "hooks": hooks,
+            }
+            _consensus_annotate_kwargs: dict[str, typing.Any] = {
+                "max_char_buffer": max_char_buffer,
+                "batch_length": batch_length,
+                "additional_context": additional_context,
+                "debug": debug,
+                "extraction_passes": extraction_passes,
+                "context_window_chars": context_window_chars,
+                "show_progress": show_progress,
+                "max_workers": max_workers,
+                "tokenizer": tokenizer,
+            }
+            result = _consensus.consensus_extract(
+                text=text_or_documents,
+                model_ids=consensus_models,
+                build_components_fn=_build_extraction_components,
+                build_kwargs=_consensus_build_kwargs,
+                annotate_kwargs=_consensus_annotate_kwargs,
+            )
+            if schema is not None and effective_retries > 0:
+                result = _pydantic_validation.pydantic_retry(
+                    result,
+                    schema,
+                    annotator,
+                    res,
+                    max_char_buffer=max_char_buffer,
+                    batch_length=batch_length,
+                    additional_context=additional_context,
+                    debug=debug,
+                    extraction_passes=extraction_passes,
+                    context_window_chars=context_window_chars,
+                    show_progress=show_progress,
+                    max_workers=max_workers,
+                    tokenizer=tokenizer,
+                    alignment_kwargs=alignment_kwargs,
+                    hooks=_hooks,
+                    max_retries=effective_retries,
+                )
+            _compute_reliability(
+                result, schema=schema, reliability_config=reliability_config
+            )
+            _hooks.emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
+            return result
+
+        # ── Single-model path ────────────────────────────────────────
         if isinstance(text_or_documents, str):
             result = annotator.annotate_text(
                 text=text_or_documents,
@@ -605,6 +718,7 @@ async def async_extract(
     optimized_config: typing.Any = None,
     schema_validation_retries: int | typing.Any = _UNSET,
     reliability_config: reliability_mod.ReliabilityConfig | bool = True,
+    consensus_models: list[str] | None = None,
 ) -> list[data.AnnotatedDocument] | data.AnnotatedDocument:
     """Async version of ``extract`` for non-blocking LLM inference.
 
@@ -666,6 +780,13 @@ async def async_extract(
         default ``ReliabilityConfig`` weights.  Pass a
         ``ReliabilityConfig`` instance to customise weights.  Set to
         ``False`` to skip reliability scoring entirely.
+      consensus_models: Optional list of model IDs for multi-model
+        consensus extraction.  Each string is resolved through the
+        provider router, so any model ID accepted by ``model_id``
+        works here — including built-in providers (Gemini, OpenAI,
+        Ollama) and plugin providers (``langcore-litellm``, custom
+        entry-point plugins).  You can mix providers in one list.
+        See ``extract()`` docstring for full details.
 
     Returns:
       AnnotatedDocument (string input) or list of AnnotatedDocuments.
@@ -729,6 +850,85 @@ async def async_extract(
 
         effective_retries = _resolve_retry_count(schema_validation_retries, schema)
 
+        # ── Multi-model consensus path ───────────────────────────────
+        if (
+            consensus_models
+            and len(consensus_models) > 1
+            and isinstance(text_or_documents, str)
+        ):
+            _consensus_build_kwargs: dict[str, typing.Any] = {
+                "text_or_documents": text_or_documents,
+                "prompt_description": prompt_description,
+                "examples": examples,
+                "api_key": api_key,
+                "format_type": format_type,
+                "max_char_buffer": max_char_buffer,
+                "temperature": temperature,
+                "fence_output": fence_output,
+                "use_schema_constraints": use_schema_constraints,
+                "batch_length": batch_length,
+                "max_workers": max_workers,
+                "additional_context": additional_context,
+                "resolver_params": resolver_params,
+                "language_model_params": language_model_params,
+                "debug": debug,
+                "model_url": model_url,
+                "extraction_passes": extraction_passes,
+                "context_window_chars": context_window_chars,
+                "config": None,
+                "model": None,
+                "fetch_urls": False,
+                "prompt_validation_level": pv.PromptValidationLevel.OFF,
+                "prompt_validation_strict": False,
+                "show_progress": show_progress,
+                "tokenizer": tokenizer,
+                "schema": schema,
+                "hooks": hooks,
+            }
+            _consensus_annotate_kwargs: dict[str, typing.Any] = {
+                "max_char_buffer": max_char_buffer,
+                "batch_length": batch_length,
+                "additional_context": additional_context,
+                "debug": debug,
+                "extraction_passes": extraction_passes,
+                "context_window_chars": context_window_chars,
+                "show_progress": show_progress,
+                "max_workers": max_workers,
+                "tokenizer": tokenizer,
+            }
+            result = await _consensus.async_consensus_extract(
+                text=text_or_documents,
+                model_ids=consensus_models,
+                build_components_fn=_build_extraction_components,
+                build_kwargs=_consensus_build_kwargs,
+                annotate_kwargs=_consensus_annotate_kwargs,
+            )
+            if schema is not None and effective_retries > 0:
+                result = await _pydantic_validation.async_pydantic_retry(
+                    result,
+                    schema,
+                    annotator,
+                    res,
+                    max_char_buffer=max_char_buffer,
+                    batch_length=batch_length,
+                    additional_context=additional_context,
+                    debug=debug,
+                    extraction_passes=extraction_passes,
+                    context_window_chars=context_window_chars,
+                    show_progress=show_progress,
+                    max_workers=max_workers,
+                    tokenizer=tokenizer,
+                    alignment_kwargs=alignment_kwargs,
+                    hooks=_hooks,
+                    max_retries=effective_retries,
+                )
+            _compute_reliability(
+                result, schema=schema, reliability_config=reliability_config
+            )
+            await _hooks.async_emit(hooks_lib.HookName.EXTRACTION_COMPLETE, result)
+            return result
+
+        # ── Single-model path ────────────────────────────────────────
         if isinstance(text_or_documents, str):
             result = await annotator.async_annotate_text(
                 text=text_or_documents,

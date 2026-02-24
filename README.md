@@ -14,6 +14,7 @@
 - [Feature Comparison](#feature-comparison)
 - [Quick Start](#quick-start)
 - [Schema-First Extraction with Pydantic](#schema-first-extraction-with-pydantic)
+- [Multi-Model Consensus Extraction](#multi-model-consensus-extraction)
 - [Confidence Scoring](#confidence-scoring)
 - [Extraction Reliability Score](#extraction-reliability-score)
 - [Extraction Hooks & Events](#extraction-hooks--events)
@@ -37,6 +38,7 @@ LangCore extends Google's LangCore with the following features:
 |---|---|
 | **Pydantic Schema Extraction** | Define extraction targets as Pydantic models with auto-generated prompts and JSON schema constraints (`schema_adapter`, `schema_generator`) |
 | **Schema Validation Retry** | Auto-enabled Pydantic validate → re-ask loop: validates extractions against the schema and retries invalid ones with error feedback (configurable via `schema_validation_retries`) |
+| **Multi-Model Consensus** | Run extraction across multiple LLM providers and merge results — extractions confirmed by multiple models receive higher confidence (`consensus_models`) |
 | **Confidence Scoring** | Per-extraction confidence (0.0–1.0) combining alignment quality + token overlap, with configurable weights |
 | **Extraction Reliability Score** | Composite quality metric (0.0–1.0) combining confidence, schema validity, field completeness, and source grounding — configurable via `ReliabilityConfig` |
 | **Extraction Hooks & Events** | 6 lifecycle events (`extraction:start`, `chunk`, `llm_call`, `alignment`, `complete`, `error`) with fault-tolerant callbacks |
@@ -92,6 +94,7 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | **Document-level confidence** | ✅ `result.average_confidence` | ❌ | ❌ | ❌ |
 | **Document-level reliability** | ✅ `result.average_reliability` | ❌ | ❌ | ❌ |
 | **Multi-pass confidence boost** | ✅ Cross-pass frequency augmentation | ❌ | ❌ | ❌ |
+| **Multi-model consensus** | ✅ `consensus_models=["m1", "m2"]` — agreement-weighted confidence | ❌ | ❌ | ❌ |
 | **Prompt alignment validation** | ✅ Warnings for non-verbatim examples | ❌ | ❌ | ❌ |
 
 ### Hooks & Observability
@@ -386,6 +389,53 @@ result = lx.extract(text="...", schema=Invoice, schema_validation_retries=0)
 Retries also work for **Document list** inputs — each document is validated and retried independently.
 
 When `schema` is not provided, `schema_validation_retries` defaults to 0 (no-op).
+
+### Multi-Model Consensus Extraction
+
+Run the same extraction across multiple LLM providers and automatically merge results. Extractions confirmed by multiple models receive higher confidence scores, while unique findings from individual models are still preserved.
+
+```python
+import langcore as lx
+
+result = lx.extract(
+    text="Patient Jane Doe received Lisinopril 10mg for hypertension.",
+    examples=[...],
+    consensus_models=["gemini-2.5-flash", "gpt-4o", "litellm/anthropic/claude-sonnet-4"],
+)
+
+# Extractions agreed upon by 2+ models get higher confidence
+for ext in result.extractions:
+    model = ext.attributes.get("_consensus_model_id", "unknown")
+    print(f"{ext.extraction_text} (confidence={ext.confidence_score}, from={model})")
+```
+
+**Accepted model IDs:**
+
+Each string in `consensus_models` is resolved through the same provider router used by `model_id`. Any model identifier that works with `extract()` works here too:
+
+| Provider | Format | Examples |
+|---|---|---|
+| **Gemini** (built-in) | `gemini-*` | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash` |
+| **OpenAI** (built-in) | `gpt-*` | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` |
+| **Ollama** (built-in) | Model family name | `llama3.2:1b`, `mistral:7b`, `qwen2.5:72b`, `deepseek-coder-v2` |
+| **LiteLLM** (plugin) | `litellm/<provider>/<model>` | `litellm/anthropic/claude-sonnet-4`, `litellm/gpt-4o`, `litellm/ollama/llama3`, `litellm/bedrock/anthropic.claude-3` |
+| **Custom plugins** | Any registered pattern | Any model ID matched by a `langcore.providers` entry-point plugin |
+
+You can freely mix providers in a single list — e.g. `["gemini-2.5-flash", "gpt-4o", "litellm/anthropic/claude-sonnet-4"]`.
+
+> **LiteLLM support:** Install the `langcore-litellm` plugin (`pip install langcore-litellm`) to access 100+ models via a unified interface. Prefix model IDs with `litellm/` so the provider router dispatches correctly. See the [langcore-litellm README](../langcore-litellm/README.md) for full details.
+
+**How it works:**
+
+1. Each model in `consensus_models` runs extraction independently on the same text.
+2. Results are merged using overlap-aware deduplication (same logic as multi-pass extraction).
+3. Confidence is computed as `agreement_ratio × alignment_confidence`, where `agreement_ratio = models_that_found_it / total_models`.
+4. Each extraction is tagged with `_consensus_model_id` in its attributes.
+5. Token usage from all models is summed in the result.
+
+Consensus works with all other features — schema validation retries, reliability scoring, and hooks all apply to the merged result. The async version (`async_extract`) runs all models **concurrently** via `asyncio.gather` for maximum throughput.
+
+When only one model is in the list, it falls back to standard single-model extraction.
 
 ### Confidence Scoring
 
