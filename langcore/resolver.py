@@ -26,12 +26,19 @@ from langcore.core import tokenizer as tokenizer_lib
 _FUZZY_ALIGNMENT_MIN_THRESHOLD = 0.75
 
 # ── Alignment-quality weights for confidence scoring ──────────────
+
+# Default confidence for extractions that were not aligned to any
+# source span (``alignment_status is None``).  A low but non-zero
+# score signals that the extraction exists but has no positional
+# evidence in the source text.
+_UNALIGNED_DEFAULT_CONFIDENCE: Final[float] = 0.2
+
 _ALIGNMENT_CONFIDENCE: Final[dict[data.AlignmentStatus | None, float]] = {
     data.AlignmentStatus.MATCH_EXACT: 1.0,
     data.AlignmentStatus.MATCH_LESSER: 0.8,
     data.AlignmentStatus.MATCH_GREATER: 0.7,
     data.AlignmentStatus.MATCH_FUZZY: 0.5,
-    None: 0.2,
+    None: _UNALIGNED_DEFAULT_CONFIDENCE,
 }
 
 # Default relative weight of alignment quality vs. token overlap
@@ -930,6 +937,7 @@ def compute_alignment_confidence(
     *,
     w_alignment: float | None = None,
     w_overlap: float | None = None,
+    unaligned_confidence: float | None = None,
 ) -> float:
     """Compute a confidence score for an aligned extraction.
 
@@ -938,7 +946,7 @@ def compute_alignment_confidence(
     1. **Alignment quality** — determined by ``alignment_status``
        (``MATCH_EXACT`` = 1.0, ``MATCH_LESSER`` = 0.8,
        ``MATCH_GREATER`` = 0.7, ``MATCH_FUZZY`` = 0.5,
-       unaligned = 0.2).
+       unaligned = *unaligned_confidence*).
     2. **Token overlap ratio** — the number of tokens in the extraction
        text divided by the span size (in tokens) that was matched in the
        source.  When no token interval is available the ratio defaults to
@@ -959,14 +967,29 @@ def compute_alignment_confidence(
         sum with ``w_overlap`` to 1.0 when both are provided.
       w_overlap: Weight for token overlap ratio (default 0.3).  Must
         sum with ``w_alignment`` to 1.0 when both are provided.
+      unaligned_confidence: Confidence assigned to extractions whose
+        ``alignment_status`` is ``None`` (i.e. they could not be
+        located in the source text).  Defaults to 0.2 — a low but
+        non-zero score indicating the extraction exists but has no
+        positional evidence.
 
     Returns:
       A float in ``[0.0, 1.0]``.
     """
     wa = w_alignment if w_alignment is not None else _W_ALIGNMENT_DEFAULT
     wo = w_overlap if w_overlap is not None else _W_OVERLAP_DEFAULT
+    unaligned = (
+        unaligned_confidence
+        if unaligned_confidence is not None
+        else _UNALIGNED_DEFAULT_CONFIDENCE
+    )
 
-    alignment_quality = _ALIGNMENT_CONFIDENCE.get(extraction.alignment_status, 0.2)
+    if extraction.alignment_status is None:
+        alignment_quality = unaligned
+    else:
+        alignment_quality = _ALIGNMENT_CONFIDENCE.get(
+            extraction.alignment_status, unaligned
+        )
 
     overlap_ratio = alignment_quality  # default when no token info
     if extraction.token_interval is not None and extraction.extraction_text:

@@ -156,10 +156,43 @@ class MergeTypesTest(parameterized.TestCase):
         result = schema_generator._merge_types([int, float])
         self.assertEqual(result, float)
 
-    def test_mixed_types_fallback(self):
-        """Incompatible types fall back to str."""
+    def test_mixed_types_union(self):
+        """Incompatible types produce a Union."""
+        import types
+
         result = schema_generator._merge_types([str, int])
-        self.assertEqual(result, str)
+        # operator.or_ on types produces types.UnionType in Python 3.12+
+        self.assertIsInstance(result, types.UnionType)
+        args = set(result.__args__)
+        self.assertEqual(args, {int, str})
+
+    def test_three_way_mixed_union(self):
+        """Three different types produce a Union of all three."""
+        import types
+
+        result = schema_generator._merge_types([str, int, bool])
+        self.assertIsInstance(result, types.UnionType)
+        args = set(result.__args__)
+        self.assertEqual(args, {bool, int, str})
+
+
+class MixedTypeSchemaTest(absltest.TestCase):
+    """Integration tests for schemas with mixed-type fields."""
+
+    def test_schema_from_examples_mixed_int_str(self):
+        """A field seen as both int and str accepts either."""
+        model = schema_generator.schema_from_examples(
+            [
+                {"value": 42},
+                {"value": "hello"},
+            ]
+        )
+        # Should accept int
+        inst_int = model(value=99)
+        self.assertEqual(inst_int.value, 99)
+        # Should accept str
+        inst_str = model(value="world")
+        self.assertEqual(inst_str.value, "world")
 
 
 if __name__ == "__main__":

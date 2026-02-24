@@ -343,7 +343,7 @@ result = lx.extract(
 )
 ```
 
-> **Tip:** Use `lx.schema_from_pydantic(Invoice)` to inspect the auto-generated prompt and JSON schema before running extraction. Use `lx.schema_from_example({"name": "John", "age": 30})` to auto-generate a Pydantic model from a plain dict, or `lx.schema_from_examples([{"name": "John"}, {"name": "Jane", "age": 30}])` to merge multiple examples (fields default to optional when absent from some examples).
+> **Tip:** Use `lx.schema_from_pydantic(Invoice)` to inspect the auto-generated prompt and JSON schema before running extraction. Use `lx.schema_from_example({"name": "John", "age": 30})` to auto-generate a Pydantic model from a plain dict, or `lx.schema_from_examples([{"name": "John"}, {"name": "Jane", "age": 30}])` to merge multiple examples (fields default to optional when absent from some examples). When a field has mixed types across examples (e.g. `int` in one and `str` in another), the generated model uses a `Union` type (`int | str`) so Pydantic accepts any of the observed types.
 
 > **Under the hood:** The `PydanticSchemaAdapter` converts your Pydantic model into LangCore's internal `SchemaConfig` — auto-generating the prompt description, JSON schema, and seed examples. You can use it directly for advanced scenarios: `from langcore.pydantic_schema import PydanticSchemaAdapter`.
 
@@ -369,7 +369,7 @@ Every extraction is automatically assigned a `confidence_score` between 0.0 and 
 - **Alignment quality** (`w_alignment`, default 70%) — how well the extraction text matched the source: exact match = 1.0, lesser = 0.8, greater = 0.7, fuzzy = 0.5, unaligned = 0.2.
 - **Token overlap ratio** (`w_overlap`, default 30%) — how many tokens in the extraction text vs. the matched source span.
 
-Both weights are configurable — pass `w_alignment` and `w_overlap` keyword arguments to `compute_alignment_confidence()` to tune the balance for your use case.
+All weights are configurable — pass `w_alignment` and `w_overlap` keyword arguments to `compute_alignment_confidence()` to tune the balance for your use case. The unaligned default (0.2) can also be overridden via `unaligned_confidence` when you want a different baseline for extractions that couldn't be located in the source text.
 
 ```python
 result = lx.extract(

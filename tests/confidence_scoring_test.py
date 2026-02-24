@@ -94,6 +94,27 @@ class ComputeAlignmentConfidenceTest(parameterized.TestCase):
         expected = round(0.7 * 0.2 + 0.3 * 0.2, 4)
         self.assertAlmostEqual(score, expected, places=4)
 
+    def test_custom_unaligned_confidence(self):
+        """Custom unaligned_confidence overrides the 0.2 default."""
+        ext = data.Extraction(
+            extraction_class="entity",
+            extraction_text="unknown",
+            alignment_status=None,
+        )
+        score = resolver.compute_alignment_confidence(ext, unaligned_confidence=0.5)
+        expected = round(0.7 * 0.5 + 0.3 * 0.5, 4)
+        self.assertAlmostEqual(score, expected, places=4)
+
+    def test_custom_unaligned_zero(self):
+        """unaligned_confidence=0.0 gives zero score for unaligned."""
+        ext = data.Extraction(
+            extraction_class="entity",
+            extraction_text="unknown",
+            alignment_status=None,
+        )
+        score = resolver.compute_alignment_confidence(ext, unaligned_confidence=0.0)
+        self.assertAlmostEqual(score, 0.0, places=4)
+
     def test_score_always_between_0_and_1(self):
         """Confidence score is always in [0.0, 1.0]."""
         for status in [*list(data.AlignmentStatus), None]:

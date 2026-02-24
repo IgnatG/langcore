@@ -8,6 +8,8 @@ robust type annotations.
 
 from __future__ import annotations
 
+import functools
+import operator
 from typing import Any
 
 import pydantic
@@ -153,8 +155,10 @@ def _merge_types(types_list: list[type]) -> type:
     """Merge multiple inferred types into a single compatible type.
 
     When all observed types are the same, returns that type. When
-    int and float are mixed, returns float. Otherwise defaults to
-    str as the most permissive text type.
+    ``int`` and ``float`` are mixed, returns ``float``.  For other
+    mixed-type combinations (e.g. ``int`` + ``str``), a ``Union``
+    type is returned so that Pydantic can accept any of the
+    observed types.
 
     Parameters:
         types_list: A list of inferred types to merge.
@@ -175,5 +179,6 @@ def _merge_types(types_list: list[type]) -> type:
     if unique <= {int, float, bool}:
         return float
 
-    # Mixed types → str
-    return str
+    # Mixed types → Union of observed types (sorted for determinism)
+    sorted_types = sorted(unique, key=lambda t: t.__name__)
+    return functools.reduce(operator.or_, sorted_types)  # type: ignore[return-value]
