@@ -9,9 +9,8 @@
 ## Table of Contents
 
 - [Overview](#overview)
-- [What's Added Over LangCore](#whats-added-over-langcore)
+- [Feature Overview](#feature-overview)
 - [Core Capabilities](#core-capabilities)
-- [Feature Comparison](#feature-comparison)
 - [Quick Start](#quick-start)
 - [Schema-First Extraction with Pydantic](#schema-first-extraction-with-pydantic)
 - [Multi-Model Consensus Extraction](#multi-model-consensus-extraction)
@@ -19,33 +18,70 @@
 - [Extraction Reliability Score](#extraction-reliability-score)
 - [Extraction Hooks & Events](#extraction-hooks--events)
 - [Quality Metrics & Evaluation](#quality-metrics--evaluation)
+- [Ecosystem Plugins](#ecosystem-plugins)
 - [Installation](#installation)
 - [API Key Setup for Cloud Models](#api-key-setup-for-cloud-models)
 - [Adding Custom Model Providers](#adding-custom-model-providers)
 - [Using OpenAI Models](#using-openai-models)
 - [Using Local LLMs with Ollama](#using-local-llms-with-ollama)
 - [More Examples](#more-examples)
-- [Ecosystem Plugins](#ecosystem-plugins)
 - [Contributing](#contributing)
 - [Testing](#testing)
 - [License](#license)
 
-## What's Added Over LangCore
+## Feature Overview
 
-LangCore extends Google's LangCore with the following features:
+LangCore is a batteries-included extraction framework. Core features ship with the `langcore` package; additional capabilities are available through first-party plugin packages that you install as needed.
+
+### Core Features (`langcore`)
 
 | Feature | Description |
 |---|---|
-| **Pydantic Schema Extraction** | Define extraction targets as Pydantic models with auto-generated prompts and JSON schema constraints (`schema_adapter`, `schema_generator`) |
-| **Schema Validation Retry** | Auto-enabled Pydantic validate → re-ask loop: validates extractions against the schema and retries invalid ones with error feedback (configurable via `schema_validation_retries`) |
-| **Multi-Model Consensus** | Run extraction across multiple LLM providers and merge results — extractions confirmed by multiple models receive higher confidence (`consensus_models`) |
+| **Few-Shot Extraction** | Define extraction tasks with a prompt and examples — no fine-tuning required |
+| **Pydantic Schema Extraction** | Define targets as Pydantic models; prompts, JSON schema constraints, and seed examples are auto-generated |
+| **Schema Validation Retry** | Instructor-style validate → re-ask loop: validates extractions against the Pydantic schema and retries invalid ones with error feedback |
+| **Multi-Model Consensus** | Run extraction across multiple LLM providers and merge results — extractions confirmed by multiple models receive higher confidence |
 | **Confidence Scoring** | Per-extraction confidence (0.0–1.0) combining alignment quality + token overlap, with configurable weights |
-| **Extraction Reliability Score** | Composite quality metric (0.0–1.0) combining confidence, schema validity, field completeness, and source grounding — configurable via `ReliabilityConfig` |
-| **Extraction Hooks & Events** | 6 lifecycle events (`extraction:start`, `chunk`, `llm_call`, `alignment`, `complete`, `error`) with fault-tolerant callbacks |
-| **Quality Metrics & Evaluation** | Built-in P/R/F1/accuracy metrics with per-field and per-document breakdown |
-| **Multi-pass Confidence** | Cross-pass frequency augmentation for higher-confidence extractions |
-| **Prompt Alignment Validation** | Warnings when few-shot examples contain non-verbatim text |
-| **Plugin Ecosystem** | 8 first-party plugins: LiteLLM, audit, guardrails, hybrid, DSPy, RAG, Docling, and API — see [Ecosystem Plugins](#ecosystem-plugins) |
+| **Extraction Reliability Score** | Composite quality metric (0.0–1.0) combining confidence, schema validity, field completeness, and source grounding |
+| **Source Grounding & Alignment** | Maps every extraction to its exact character position in the source text for traceability and verification |
+| **Long Document Chunking** | Optimized chunking + parallel processing overcomes the "needle-in-a-haystack" problem in large documents |
+| **Multi-Pass Extraction** | Configurable `extraction_passes` for higher recall with cross-pass confidence boosting |
+| **Schema Utilities** | `to_pydantic()`, `schema_from_pydantic()`, `schema_from_example()`, `schema_from_examples()` — convert between Pydantic models, dicts, and LangCore's internal format |
+| **Extraction Hooks & Events** | 6 lifecycle events (`start`, `chunk`, `llm_call`, `alignment`, `complete`, `error`) with fault-tolerant callbacks |
+| **Global Configuration** | `lx.configure(hooks=...)` sets app-wide hooks; per-call hooks compose via `+` operator |
+| **Prompt Alignment Validation** | Automatic warnings when example `extraction_text` doesn't appear verbatim in the example `text` |
+| **Quality Metrics & Evaluation** | Built-in P/R/F1/accuracy with per-field and per-document breakdown, fuzzy matching, and averaging modes |
+| **Response Caching** | Built-in LLM response cache with automatic cache-busting for multi-pass extraction |
+| **Interactive Visualization** | Generates self-contained HTML to review extractions in their original context |
+| **Flexible Model Support** | Built-in providers for Gemini, OpenAI, and Ollama; extensible via plugins |
+| **Custom Provider System** | `BaseLanguageModel` ABC + entry-point plugin registry with priority-based resolution |
+| **Async & Parallel** | `async_extract()` with `max_workers` for concurrent chunk processing |
+| **URL/File Input** | Accepts URLs, file paths, and raw text directly |
+| **Batch API** | Vertex AI Batch API support for large-scale jobs |
+| **Controlled Generation** | JSON schema constraints via supported models (Gemini) |
+
+### Plugin Features
+
+| Feature | Package | Description |
+|---|---|---|
+| **100+ LLM Providers** | `langcore-litellm` | OpenAI, Anthropic, Azure, Mistral, Groq, Cohere, HuggingFace, Ollama, vLLM, and more via LiteLLM |
+| **Output Validation & Retry** | `langcore-guardrails` | 7 built-in validators with corrective retry loop and 4 on-fail actions |
+| **Grounding Validator** | `langcore-guardrails` | Rejects hallucinated extractions using alignment quality and character coverage checks |
+| **Confidence Threshold** | `langcore-guardrails` | Filters extractions below a confidence score cutoff |
+| **Schema / JSON Validation** | `langcore-guardrails` | Pydantic and JSON Schema validators with strict/lenient modes |
+| **Consistency Rules** | `langcore-guardrails` | Cross-checks extracted values using user-supplied business rules |
+| **Regex Validation** | `langcore-guardrails` | Match extracted output against regex patterns |
+| **Field Completeness** | `langcore-guardrails` | Ensure required schema fields are present and non-empty |
+| **Validator Chaining** | `langcore-guardrails` | Compose multiple validators with per-validator failure actions |
+| **Validator Registry** | `langcore-guardrails` | `@register_validator` decorator for plugging in custom validators |
+| **Audit Logging** | `langcore-audit` | Structured audit records for every LLM call — pluggable sinks (logging, JSONL, OpenTelemetry) |
+| **Hybrid Rules + LLM** | `langcore-hybrid` | Deterministic regex/function rules with LLM fallback — save 50–80% on LLM costs |
+| **Prompt Optimization** | `langcore-dspy` | Automatic prompt and few-shot example optimization using DSPy (MIPROv2, GEPA) |
+| **Evaluation (P/R/F1)** | `langcore-dspy` | Built-in evaluation with per-document precision, recall, and F1 for optimized configs |
+| **RAG Query Parsing** | `langcore-rag` | Decompose natural-language queries into semantic terms + structured metadata filters |
+| **Query Caching** | `langcore-rag` | LRU cache for parsed queries with Pydantic schema introspection |
+| **PDF Support** | `langcore-docling` | Native PDF extraction via Docling — drop-in replacement for `lx.extract()` |
+| **HTTP API** | `langcore-api` | Production-ready REST service with task queuing, caching, webhooks, and Prometheus metrics |
 
 ## Core Capabilities
 
@@ -56,131 +92,6 @@ LangCore extends Google's LangCore with the following features:
 5. **Flexible LLM Support:** Supports your preferred models, from cloud-based LLMs like the Google Gemini family to local open-source models via the built-in Ollama interface.
 6. **Adaptable to Any Domain:** Define extraction tasks for any domain using just a few examples — no model fine-tuning required.
 7. **Leverages LLM World Knowledge:** Utilize precise prompt wording and few-shot examples to influence how the extraction task may utilize LLM knowledge.
-
-## Feature Comparison
-
-How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com/langstruct/langstruct), [Instructor](https://github.com/jxnl/instructor), and [Guardrails AI](https://github.com/guardrails-ai/guardrails).
-
-### Core Extraction Capabilities
-
-| Feature | LangCore | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Structured extraction from text** | ✅ Few-shot + prompt-driven | ✅ Schema-driven | ✅ Pydantic response model | ⚠️ Guard wrapping |
-| **Source grounding / alignment** | ✅ Exact span mapping with char offsets | ❌ | ❌ | ❌ |
-| **Long document chunking** | ✅ Optimized chunking + parallel processing | ⚠️ Basic chunking | ❌ | ❌ |
-| **Multi-pass extraction** | ✅ Configurable `extraction_passes` for higher recall | ❌ | ❌ | ❌ |
-| **Interactive HTML visualization** | ✅ Built-in entity-in-context viewer | ❌ | ❌ | ❌ |
-| **URL/file document input** | ✅ Accepts URLs, file paths, and raw text | ❌ | ❌ | ❌ |
-| **Batch API support** | ✅ Vertex AI Batch API | ❌ | ❌ | ❌ |
-
-### Schema & Typing
-
-| Feature | LangCore | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Pydantic schema extraction** | ✅ `schema=MyModel` with auto-prompt generation | ✅ Native | ✅ Native response model | ⚠️ Via Pydantic integration |
-| **Schema validation retry** | ✅ Auto-enabled validate → re-ask loop with `schema_validation_retries` | ❌ | ✅ Auto retry on Pydantic failure | ⚠️ Via Guard wrapping |
-| **Few-shot examples** | ✅ `ExampleData` with text + extractions | ⚠️ Limited | ❌ | ❌ |
-| **Pydantic ↔ ExampleData bridge** | ✅ `to_pydantic()` / `schema_from_pydantic()` | ❌ | N/A | N/A |
-| **Schema from dict** | ✅ `schema_from_example({"key": "val"})` | ❌ | ❌ | ❌ |
-| **Controlled generation** | ✅ JSON schema constraints via supported models | ⚠️ | ⚠️ Mode-dependent | ❌ |
-| **Union type support** | ❌ | ❌ | ✅ `Union[A, B]` | ❌ |
-
-### Confidence & Quality
-
-| Feature | LangCore | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Confidence scoring** | ✅ Per-extraction (alignment quality + token overlap) | ❌ | ❌ | ❌ |
-| **Reliability scoring** | ✅ Composite metric (confidence + schema validity + completeness + grounding) | ❌ | ❌ | ❌ |
-| **Document-level confidence** | ✅ `result.average_confidence` | ❌ | ❌ | ❌ |
-| **Document-level reliability** | ✅ `result.average_reliability` | ❌ | ❌ | ❌ |
-| **Multi-pass confidence boost** | ✅ Cross-pass frequency augmentation | ❌ | ❌ | ❌ |
-| **Multi-model consensus** | ✅ `consensus_models=["m1", "m2"]` — agreement-weighted confidence | ❌ | ❌ | ❌ |
-| **Prompt alignment validation** | ✅ Warnings for non-verbatim examples | ❌ | ❌ | ❌ |
-
-### Hooks & Observability
-
-| Feature | LangCore | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Event hook system** | ✅ 6 lifecycle events via `Hooks` class | ❌ | ✅ `completion:kwargs`, `parse:error` etc. | ❌ |
-| **Global hooks** | ✅ `lx.configure(hooks=...)` | ❌ | ❌ | ❌ |
-| **Hook composition** | ✅ Merge with `hooks_a + hooks_b` | ❌ | ❌ | ❌ |
-| **Fault-tolerant callbacks** | ✅ Exceptions logged & swallowed | ❌ | ❌ | ❌ |
-| **Token usage tracking** | ⚠️ Via API layer | ❌ | ✅ `response.usage` | ❌ |
-
-### Validation & Guardrails (`langcore-guardrails` plugin)
-
-| Feature | LangCore + Guardrails | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Validation + retry loop** | ✅ Corrective prompts with error feedback | ❌ | ✅ Auto retry on Pydantic failure | ✅ Guard wrapping with retry |
-| **Pydantic schema validation** | ✅ `SchemaValidator` — strict or coercive | ❌ | ✅ Native | ⚠️ Via integration |
-| **JSON Schema validation** | ✅ `JsonSchemaValidator` with strict mode | ❌ | ❌ | ✅ JSON Schema guard |
-| **Confidence threshold** | ✅ `ConfidenceThresholdValidator` | ❌ | ❌ | ❌ |
-| **Field completeness** | ✅ `FieldCompletenessValidator` | ❌ | ❌ | ⚠️ Custom validators |
-| **Consistency rules** | ✅ `ConsistencyValidator` | ❌ | ❌ | ⚠️ Custom validators |
-| **Regex validation** | ✅ `RegexValidator` | ❌ | ❌ | ✅ Regex guard |
-| **On-fail actions** | ✅ `EXCEPTION` / `REASK` / `FILTER` / `NOOP` | ❌ | ⚠️ Exception only | ✅ `EXCEPTION` / `REASK` / `FIX` / `NOOP` |
-| **Validator registry** | ✅ `@register_validator` decorator | ❌ | ❌ | ✅ Hub (67+ validators) |
-| **Validator chaining** | ✅ `ValidatorChain` with per-validator actions | ❌ | ❌ | ✅ Guard chaining |
-| **Error-only correction mode** | ✅ Omit invalid output from retry prompt | ❌ | ❌ | ❌ |
-| **Batch-independent retries** | ✅ Each prompt retries independently | ❌ | ❌ | ❌ |
-| **Async concurrency control** | ✅ `max_concurrency` semaphore | ❌ | ✅ | ❌ |
-
-### DSPy Prompt Optimization (`langcore-dspy` plugin)
-
-| Feature | LangCore + DSPy | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **MIPROv2 optimizer** | ✅ Fast, general-purpose | ✅ | ❌ | ❌ |
-| **GEPA optimizer** | ✅ Reflective / feedback-driven | ✅ | ❌ | ❌ |
-| **Persist optimized configs** | ✅ `save()` / `load()` to directory | ✅ | ❌ | ❌ |
-| **Evaluation (P/R/F1)** | ✅ `evaluate()` with per-document details | ⚠️ Basic | ❌ | ❌ |
-| **Native pipeline integration** | ✅ `optimized_config` param in `extract()` | ❌ Separate pipeline | ❌ | ❌ |
-
-### Model Support
-
-| Feature | LangCore | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Google Gemini** | ✅ Built-in | ❌ | ✅ | ✅ |
-| **OpenAI / GPT** | ✅ Via providers | ❌ | ✅ Native | ✅ |
-| **Local LLMs (Ollama)** | ✅ Built-in | ❌ | ⚠️ Via patches | ❌ |
-| **LiteLLM (100+ models)** | ✅ Via `langcore-litellm` | ✅ | ❌ | ✅ |
-| **Custom model providers** | ✅ `BaseLanguageModel` ABC | ❌ | ❌ | ❌ |
-| **Community provider plugins** | ✅ Plugin registry | ❌ | ❌ | ❌ |
-
-### Async & Performance
-
-| Feature | LangCore | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Async extraction** | ✅ `async_extract()` | ⚠️ | ✅ | ⚠️ |
-| **Parallel workers** | ✅ `max_workers` for concurrent chunk processing | ❌ | ❌ | ❌ |
-| **Response caching** | ✅ Built-in with cache-busting for multi-pass | ⚠️ | ✅ | ❌ |
-
-### Quality Metrics & Evaluation
-
-| Feature | LangCore | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Precision / Recall / F1** | ✅ `ExtractionMetrics` static helpers + `.evaluate()` | ✅ `ExtractionMetrics` | ❌ | ❌ |
-| **Accuracy (exact-match ratio)** | ✅ | ✅ | ❌ | ❌ |
-| **Per-field breakdown** | ✅ `FieldReport` per schema field | ⚠️ Basic | ❌ | ❌ |
-| **Per-document breakdown** | ✅ Per-document P/R/F1 dicts | ❌ | ❌ | ❌ |
-| **Pydantic schema integration** | ✅ `ExtractionMetrics(schema=Invoice)` | ❌ | ❌ | ❌ |
-| **Strict attribute matching** | ✅ `strict_attributes=True` | ❌ | ❌ | ❌ |
-| **Averaging modes** | ✅ Macro / micro / weighted | ❌ | ❌ | ❌ |
-| **Fuzzy matching** | ✅ `fuzzy_threshold` (difflib SequenceMatcher) | ❌ | ❌ | ❌ |
-| **Top-level convenience** | ✅ `lx.evaluate()` | ❌ | ❌ | ❌ |
-
-### RAG Query Parsing (`langcore-rag` plugin)
-
-| Feature | LangCore + RAG | LangStruct | Instructor | Guardrails AI |
-|---|---|---|---|---|
-| **Query → semantic terms + filters** | ✅ `QueryParser.parse()` | ✅ `.query()` | ❌ | ❌ |
-| **Async parsing** | ✅ `async_parse()` | ✅ | ❌ | ❌ |
-| **Pydantic schema introspection** | ✅ Auto-discovers filterable fields | ✅ | ❌ | ❌ |
-| **MongoDB-style operators** | ✅ `$eq`, `$gte`, `$lte`, `$in`, etc. | ✅ | ❌ | ❌ |
-| **Parse confidence score** | ✅ 0.0 – 1.0 | ❌ | ❌ | ❌ |
-| **Explanation / rationale** | ✅ Human-readable | ❌ | ❌ | ❌ |
-| **Query caching (LRU)** | ✅ `cache_maxsize` parameter | ❌ | ❌ | ❌ |
-| **Jupyter-safe sync bridge** | ✅ `parse_sync_from_async()` | ❌ | ❌ | ❌ |
-| **Any LLM backend** | ✅ Via LiteLLM (100+ providers) | ✅ | ❌ | ❌ |
 
 ## Quick Start
 
@@ -864,20 +775,153 @@ Explore RadExtract, a live interactive demo on HuggingFace Spaces that shows how
 
 ## Ecosystem Plugins
 
-LangCore has a growing ecosystem of first-party plugins:
+LangCore has a growing ecosystem of first-party plugins. Each one is an independent package you install as needed — no bloated dependencies.
 
-| Plugin | PyPI | Description |
-|---|---|---|
-| [langcore-litellm](../langcore-litellm/) | [![PyPI](https://img.shields.io/pypi/v/langcore-litellm)](https://pypi.org/project/langcore-litellm/) | Provider plugin for 100+ LLM backends via LiteLLM (OpenAI, Gemini, Anthropic, Azure, Ollama, etc.) |
-| [langcore-audit](../langcore-audit/) | [![PyPI](https://img.shields.io/pypi/v/langcore-audit)](https://pypi.org/project/langcore-audit/) | Provider plugin for structured audit logging with pluggable sinks (logging, JSONL, OpenTelemetry) |
-| [langcore-guardrails](../langcore-guardrails/) | [![PyPI](https://img.shields.io/pypi/v/langcore-guardrails)](https://pypi.org/project/langcore-guardrails/) | Provider plugin for output validation and automatic retry with corrective prompts |
-| [langcore-hybrid](../langcore-hybrid/) | [![PyPI](https://img.shields.io/pypi/v/langcore-hybrid-llm-regex)](https://pypi.org/project/langcore-hybrid-llm-regex/) | Provider plugin for deterministic rule-based extraction with LLM fallback |
-| [langcore-dspy](../langcore-dspy/) | [![PyPI](https://img.shields.io/pypi/v/langcore-dspy)](https://pypi.org/project/langcore-dspy/) | Plugin for automatic prompt optimization using DSPy (MIPROv2, GEPA) |
-| [langcore-rag](../langcore-rag/) | [![PyPI](https://img.shields.io/pypi/v/langcore-rag)](https://pypi.org/project/langcore-rag/) | Plugin for RAG query parsing — decomposes queries into semantic terms and structured filters |
-| [langcore-docling](../langcore-docling/) | [![PyPI](https://img.shields.io/pypi/v/langcore-docling)](https://pypi.org/project/langcore-docling/) | Plugin for native PDF support via Docling — drop-in replacement for `lx.extract()` |
-| [langcore-api](../langcore-api/) | [![PyPI](https://img.shields.io/pypi/v/langcore-api)](https://pypi.org/project/langcore-api/) | Production-ready HTTP service wrapping the full LangCore ecosystem (FastAPI + Celery + Redis) |
+### langcore-litellm — Universal Model Access
 
-For detailed instructions on creating a provider plugin, see the [Custom Provider Plugin Example](examples/custom_provider_plugin/).
+[![PyPI](https://img.shields.io/pypi/v/langcore-litellm)](https://pypi.org/project/langcore-litellm/)
+
+Access 100+ language models through a single unified interface via [LiteLLM](https://docs.litellm.ai/docs/). OpenAI, Anthropic, Azure, Google, Mistral, Groq, Cohere, HuggingFace, Ollama, vLLM, and more.
+
+- Native async with `asyncio.Semaphore` concurrency control
+- Multi-pass cache bypass (fresh responses on repeat passes)
+- Token usage tracking (`UsageStats`)
+- Full parameter passthrough (temperature, top_p, timeout, etc.)
+
+```python
+result = lx.extract(text, examples=examples, model_id="litellm/anthropic/claude-sonnet-4")
+```
+
+### langcore-guardrails — Output Validation & Retry
+
+[![PyPI](https://img.shields.io/pypi/v/langcore-guardrails)](https://pypi.org/project/langcore-guardrails/)
+
+Wraps any LangCore model with output validation and automatic corrective retry. 7 built-in validators:
+
+| Validator | Purpose |
+|---|---|
+| `JsonSchemaValidator` | Validate against JSON Schema with auto-repair |
+| `RegexValidator` | Match output against regex patterns |
+| `SchemaValidator` | Validate against Pydantic models (strict/lenient) |
+| `ConfidenceThresholdValidator` | Reject extractions below a confidence cutoff |
+| `FieldCompletenessValidator` | Ensure required fields are present and non-empty |
+| `ConsistencyValidator` | Cross-check values using custom business rules |
+| `GroundingValidator` | Reject hallucinated extractions via alignment quality + character coverage |
+
+- 4 on-fail actions: `EXCEPTION`, `REASK`, `FILTER`, `NOOP`
+- Validator chaining with `ValidatorChain`
+- Validator registry with `@register_validator`
+- Error-only correction mode to save tokens
+- Batch-independent retries
+
+```python
+from langcore_guardrails import GuardrailLanguageModel, SchemaValidator, GroundingValidator, OnFailAction
+
+guarded = GuardrailLanguageModel(
+    inner=base_model, validators=[SchemaValidator(Invoice, on_fail=OnFailAction.REASK)]
+)
+
+# Post-alignment grounding check
+validator = GroundingValidator(min_alignment_quality="MATCH_FUZZY", min_coverage=0.5)
+passed, filtered = validator.validate_extractions(result.extractions, source_text=result.text)
+```
+
+### langcore-audit — Audit Logging
+
+[![PyPI](https://img.shields.io/pypi/v/langcore-audit)](https://pypi.org/project/langcore-audit/)
+
+Structured audit records for every LLM call — latency, token usage, prompt/response hashes, success/failure status.
+
+- Pluggable sinks: Python logging, JSONL files, OpenTelemetry spans
+- Thread-safe, fault-tolerant (errors never affect inference)
+- Opt-in prompt/response sampling
+
+```python
+from langcore_audit import AuditLanguageModel, LoggingSink
+
+audited = AuditLanguageModel(inner=base_model, sinks=[LoggingSink()])
+```
+
+### langcore-hybrid — Rules + LLM Fallback
+
+[![PyPI](https://img.shields.io/pypi/v/langcore-hybrid-llm-regex)](https://pypi.org/project/langcore-hybrid-llm-regex/)
+
+Evaluate deterministic rules (regex, Python functions) before falling back to an LLM — save 50–80% on API costs for documents with predictable patterns.
+
+- Regex rules with named capture groups
+- Callable rules for arbitrary logic
+- Confidence thresholds for rule → LLM fallback
+- Observability counters (`rule_hits` vs `llm_fallbacks`)
+
+```python
+from langcore_hybrid import HybridLanguageModel, RegexRule, RuleConfig
+
+hybrid = HybridLanguageModel(
+    inner=base_model,
+    rule_config=RuleConfig(rules=[RegexRule(r"Date:\s*(?P<date>\d{4}-\d{2}-\d{2})")])
+)
+```
+
+### langcore-dspy — Prompt Optimization
+
+[![PyPI](https://img.shields.io/pypi/v/langcore-dspy)](https://pypi.org/project/langcore-dspy/)
+
+Automatically optimize extraction prompts and few-shot examples using [DSPy](https://dspy.ai/). Given training data, searches for the best prompt to maximize precision and recall.
+
+- MIPROv2 optimizer (fast, general-purpose)
+- GEPA optimizer (reflective, feedback-driven)
+- Persist/load optimized configs to disk
+- Built-in evaluation (P/R/F1)
+- `optimized_config` parameter in `lx.extract()`
+
+```python
+from langcore_dspy import DSPyOptimizer
+
+optimizer = DSPyOptimizer(model_id="openai/gpt-4o-mini")
+config = optimizer.optimize(prompt_description="...", examples=examples, train_texts=texts, expected_results=expected)
+result = lx.extract(text, optimized_config=config)
+```
+
+### langcore-rag — RAG Query Parsing
+
+[![PyPI](https://img.shields.io/pypi/v/langcore-rag)](https://pypi.org/project/langcore-rag/)
+
+Parse natural-language queries into semantic search terms and structured metadata filters for hybrid RAG pipelines.
+
+- Pydantic schema introspection (auto-discovers filterable fields)
+- MongoDB-style operators (`$eq`, `$gte`, `$lte`, `$in`, etc.)
+- Confidence scoring and human-readable explanation
+- Query caching (LRU) and Jupyter-safe sync bridge
+
+```python
+from langcore_rag import QueryParser
+
+parser = QueryParser(schema=Invoice, model_id="gemini/gemini-2.5-flash")
+parsed = parser.parse("invoices over $5000 due in March 2024")
+print(parsed.structured_filters)  # {"amount": {"$gte": 5000}, ...}
+```
+
+### langcore-api — Production HTTP Service
+
+[![PyPI](https://img.shields.io/pypi/v/langcore-api)](https://pypi.org/project/langcore-api/)
+
+Production-ready REST API wrapping the full LangCore ecosystem. Submit documents via HTTP and get structured entities back.
+
+- FastAPI + Celery + Redis task queue
+- Single and batch extraction endpoints
+- Multi-tier caching (LLM response + extraction result)
+- Webhook delivery with HMAC signing
+- Prometheus metrics, structured logging, SSRF protection
+- Full plugin integration (all of the above)
+- Docker-ready with web, worker, and Flower profiles
+
+```bash
+curl -X POST http://localhost:8000/api/v1/extract \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Invoice INV-001 for $500", "model_id": "litellm/gpt-4o"}'
+```
+
+For detailed instructions on creating your own provider plugin, see the [Custom Provider Plugin Example](examples/custom_provider_plugin/).
 
 ## Contributing
 
@@ -941,8 +985,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full development guidelines.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full terms.
 
-This project includes code originally developed by Google LLC as [LangCore](https://github.com/ignatg/langcore). See [NOTICE](NOTICE) for attribution details.
-
----
-
-**Happy Extracting!**
+This project includes code originally developed by Google LLC as [LangCore](https://github.com/google/langextract). See [NOTICE](NOTICE) for attribution details.
