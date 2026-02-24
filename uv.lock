@@ -735,7 +735,7 @@ wheels = [
 
 [[package]]
 name = "langcore"
-version = "1.1.0"
+version = "1.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "absl-py" },

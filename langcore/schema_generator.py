@@ -14,6 +14,11 @@ from typing import Any
 
 import pydantic
 
+# Cache for dynamically-created Pydantic model classes.  The key is a
+# frozen representation of the input dict(s) so that repeated calls
+# with identical examples return the same model class.
+_model_cache: dict[tuple, type[pydantic.BaseModel]] = {}
+
 __all__ = [
     "schema_from_example",
     "schema_from_examples",
@@ -43,6 +48,10 @@ def schema_from_example(
     if not example_dict:
         raise ValueError("Cannot generate schema from an empty dict.")
 
+    cache_key = (name, _freeze_dict(example_dict))
+    if cache_key in _model_cache:
+        return _model_cache[cache_key]
+
     field_definitions: dict[str, Any] = {}
     for key, value in example_dict.items():
         inferred_type = _infer_type(value)
@@ -54,7 +63,9 @@ def schema_from_example(
         else:
             field_definitions[key] = (inferred_type, ...)
 
-    return pydantic.create_model(name, **field_definitions)
+    model = pydantic.create_model(name, **field_definitions)
+    _model_cache[cache_key] = model
+    return model
 
 
 def schema_from_examples(
@@ -83,6 +94,10 @@ def schema_from_examples(
     if len(examples) == 1:
         return schema_from_example(examples[0], name=name)
 
+    cache_key = (name, tuple(_freeze_dict(ex) for ex in examples))
+    if cache_key in _model_cache:
+        return _model_cache[cache_key]
+
     # Collect all field names and their observed types
     all_keys: dict[str, list[Any]] = {}
     key_presence: dict[str, int] = {}
@@ -105,7 +120,25 @@ def schema_from_examples(
         else:
             field_definitions[key] = (merged_type, ...)
 
-    return pydantic.create_model(name, **field_definitions)
+    model = pydantic.create_model(name, **field_definitions)
+    _model_cache[cache_key] = model
+    return model
+
+
+def _freeze_value(value: Any) -> Any:
+    """Convert a value to a hashable frozen representation for cache keys."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return _freeze_dict(value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(v) for v in value)
+    return str(type(value).__name__)
+
+
+def _freeze_dict(d: dict[str, Any]) -> tuple:
+    """Convert a dict into a sorted tuple of (key, frozen_value) for hashing."""
+    return tuple(sorted((k, _freeze_value(v)) for k, v in d.items()))
 
 
 def _infer_type(value: Any) -> type:

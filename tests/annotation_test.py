@@ -9,6 +9,7 @@ from absl.testing import absltest, parameterized
 from langcore import annotation, prompting
 from langcore import resolver as resolver_lib
 from langcore.core import data, exceptions, tokenizer, types
+from langcore.core import format_handler as fh
 from langcore.providers import gemini
 
 
@@ -39,9 +40,9 @@ class AnnotatorTest(absltest.TestCase):
         """
         for extraction in extractions:
             if extraction.alignment_status == data.AlignmentStatus.MATCH_EXACT:
-                assert extraction.char_interval is not None, (
-                    "char_interval should not be None for AlignmentStatus.MATCH_EXACT"
-                )
+                assert (
+                    extraction.char_interval is not None
+                ), "char_interval should not be None for AlignmentStatus.MATCH_EXACT"
 
                 char_int = extraction.char_interval
                 start = char_int.start_pos
@@ -65,7 +66,8 @@ class AnnotatorTest(absltest.TestCase):
             [
                 types.ScoredOutput(
                     score=1.0,
-                    output=textwrap.dedent(f"""\
+                    output=textwrap.dedent(
+                        f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - patient: "Jane Doe"
@@ -82,12 +84,13 @@ class AnnotatorTest(absltest.TestCase):
                 condition_index: 11
                 diagnosis_date: "2023-03-15"
                 diagnosis_date_index: 13
-              ```"""),
+              ```"""
+                    ),
                 )
             ]
         ]
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
         expected_annotated_text = data.AnnotatedDocument(
@@ -190,7 +193,8 @@ class AnnotatorTest(absltest.TestCase):
             [
                 types.ScoredOutput(
                     score=1.0,
-                    output=textwrap.dedent(f"""\
+                    output=textwrap.dedent(
+                        f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - patient: "Jane Doe"
@@ -200,12 +204,13 @@ class AnnotatorTest(absltest.TestCase):
                 frequency: "daily"
                 condition: "hypertension"
                 diagnosis_date: "2023-03-15"
-              ```"""),
+              ```"""
+                    ),
                 )
             ]
         ]
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=None,
         )
         expected_annotated_text = data.AnnotatedDocument(
@@ -308,7 +313,8 @@ class AnnotatorTest(absltest.TestCase):
             [
                 types.ScoredOutput(
                     score=1.0,
-                    output=textwrap.dedent(f"""\
+                    output=textwrap.dedent(
+                        f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - patient: "Jane Doe"
@@ -332,14 +338,17 @@ class AnnotatorTest(absltest.TestCase):
                 diagnosis_date: "2023-03-15"
                 diagnosis_date_attributes:
                   status: "RELEVANT"
-              ```"""),
+              ```"""
+                    ),
                 )
             ]
         ]
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.YAML,
+                attribute_suffix=data.ATTRIBUTE_SUFFIX,
+            ),
             extraction_index_suffix=None,
-            extraction_attributes_suffix=data.ATTRIBUTE_SUFFIX,
         )
         expected_annotated_text = data.AnnotatedDocument(
             text=text,
@@ -450,14 +459,16 @@ class AnnotatorTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
                   ```yaml
                   {data.EXTRACTIONS_KEY}:
                   - medication: "Aspirin"
                     medication_index: 4
                     reason: "headache"
                     reason_index: 8
-                  ```"""),
+                  ```"""
+                        ),
                     )
                 ]
             ],
@@ -465,12 +476,14 @@ class AnnotatorTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
                   ```yaml
                   {data.EXTRACTIONS_KEY}:
                   - condition: "fever"
                     condition_index: 2
-                  ```"""),
+                  ```"""
+                        ),
                     )
                 ]
             ],
@@ -487,7 +500,7 @@ class AnnotatorTest(absltest.TestCase):
         # Token | Patient  takes one  Aspirin  for  headaches .  Pt   has  fever  .
 
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
         expected_annotated_text = data.AnnotatedDocument(
@@ -553,15 +566,17 @@ class AnnotatorTest(absltest.TestCase):
             [
                 types.ScoredOutput(
                     score=1.0,
-                    output=textwrap.dedent(f"""\
+                    output=textwrap.dedent(
+                        f"""\
             ```yaml
             {data.EXTRACTIONS_KEY}: []
-            ```"""),
+            ```"""
+                    ),
                 )
             ]
         ]
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
         expected_annotated_text = data.AnnotatedDocument(text=text, extractions=[])
@@ -576,14 +591,16 @@ class AnnotatorTest(absltest.TestCase):
 class AnnotatorMultipleDocumentTest(parameterized.TestCase):
     _FIXED_DOCUMENT_CONTENT = "Patient reports migraine."
 
-    _LLM_INFERENCE = textwrap.dedent(f"""\
+    _LLM_INFERENCE = textwrap.dedent(
+        f"""\
     ```yaml
     {data.EXTRACTIONS_KEY}:
     - PATIENT: "Patient"
       PATIENT_index: 0
     - SYMPTOM: "migraine"
       SYMPTOM_index: 2
-    ```""")
+    ```"""
+    )
 
     _ANNOTATED_DOCUMENT = data.AnnotatedDocument(
         document_id="",
@@ -704,8 +721,10 @@ class AnnotatorMultipleDocumentTest(parameterized.TestCase):
             annotator.annotate_documents(
                 document_objects,
                 resolver=resolver_lib.Resolver(
-                    fence_output=True,
-                    format_type=data.FormatType.YAML,
+                    format_handler=fh.FormatHandler(
+                        format_type=data.FormatType.YAML,
+                        use_fences=True,
+                    ),
                     extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
                 ),
                 max_char_buffer=200,
@@ -801,14 +820,16 @@ class AnnotatorMultiPassTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - patient: "John Smith"
                 patient_index: 1
               - condition: "diabetes"
                 condition_index: 4
-              ```"""),
+              ```"""
+                        ),
                     )
                 ]
             ],
@@ -816,21 +837,23 @@ class AnnotatorMultiPassTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - medication: "insulin"
                 medication_index: 7
               - frequency: "daily"
                 frequency_index: 8
-              ```"""),
+              ```"""
+                        ),
                     )
                 ]
             ],
         ]
 
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 
@@ -856,12 +879,14 @@ class AnnotatorMultiPassTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - doctor: "Dr. Smith"
                 doctor_index: 0
-              ```"""),
+              ```"""
+                        ),
                     )
                 ]
             ],
@@ -869,21 +894,23 @@ class AnnotatorMultiPassTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - patient: "Smith"
                 patient_index: 1
               - medication: "aspirin"
                 medication_index: 2
-              ```"""),
+              ```"""
+                        ),
                     )
                 ]
             ],
         ]
 
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 
@@ -909,20 +936,22 @@ class AnnotatorMultiPassTest(absltest.TestCase):
             [
                 types.ScoredOutput(
                     score=1.0,
-                    output=textwrap.dedent(f"""\
+                    output=textwrap.dedent(
+                        f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - patient: "Patient"
                 patient_index: 0
               - condition: "fever"
                 condition_index: 2
-              ```"""),
+              ```"""
+                    ),
                 )
             ]
         ]
 
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 
@@ -945,12 +974,14 @@ class AnnotatorMultiPassTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}:
               - test: "Test"
                 test_index: 0
-              ```"""),
+              ```"""
+                        ),
                     )
                 ]
             ],
@@ -958,17 +989,19 @@ class AnnotatorMultiPassTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
               ```yaml
               {data.EXTRACTIONS_KEY}: []
-              ```"""),
+              ```"""
+                        ),
                     )
                 ]
             ],
         ]
 
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 
@@ -1130,19 +1163,23 @@ class AnnotateDocumentsGeneratorTest(absltest.TestCase):
             """Return medication extractions based on prompt content."""
             for prompt in batch_prompts:
                 if "Ibuprofen" in prompt:
-                    text = textwrap.dedent(f"""\
+                    text = textwrap.dedent(
+                        f"""\
             ```yaml
             {data.EXTRACTIONS_KEY}:
             - medication: "Ibuprofen"
               medication_index: 4
-            ```""")
+            ```"""
+                    )
                 elif "Cefazolin" in prompt:
-                    text = textwrap.dedent(f"""\
+                    text = textwrap.dedent(
+                        f"""\
             ```yaml
             {data.EXTRACTIONS_KEY}:
             - medication: "Cefazolin"
               medication_index: 4
-            ```""")
+            ```"""
+                    )
                 else:
                     text = f"```yaml\n{data.EXTRACTIONS_KEY}: []\n```"
                 yield [types.ScoredOutput(score=1.0, output=text)]
@@ -1171,8 +1208,10 @@ class AnnotateDocumentsGeneratorTest(absltest.TestCase):
             self.annotator.annotate_documents(
                 docs,
                 resolver=resolver_lib.Resolver(
-                    fence_output=True,
-                    format_type=data.FormatType.YAML,
+                    format_handler=fh.FormatHandler(
+                        format_type=data.FormatType.YAML,
+                        use_fences=True,
+                    ),
                     extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
                 ),
                 show_progress=False,
@@ -1224,11 +1263,13 @@ class CrossChunkContextTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
                   ```yaml
                   {data.EXTRACTIONS_KEY}:
                   - person: "Dr. Sarah Johnson"
-                  ```"""),
+                  ```"""
+                        ),
                     )
                 ]
             ],
@@ -1236,16 +1277,20 @@ class CrossChunkContextTest(absltest.TestCase):
                 [
                     types.ScoredOutput(
                         score=1.0,
-                        output=textwrap.dedent(f"""\
+                        output=textwrap.dedent(
+                            f"""\
                   ```yaml
                   {data.EXTRACTIONS_KEY}:
                   - specialization: "heart surgery"
-                  ```"""),
+                  ```"""
+                        ),
                     )
                 ]
             ],
         ]
-        resolver = resolver_lib.Resolver(format_type=data.FormatType.YAML)
+        resolver = resolver_lib.Resolver(
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
+        )
 
         _ = self.annotator.annotate_text(
             text,
@@ -1286,7 +1331,9 @@ class CrossChunkContextTest(absltest.TestCase):
                 ]
             ],
         ]
-        resolver = resolver_lib.Resolver(format_type=data.FormatType.YAML)
+        resolver = resolver_lib.Resolver(
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
+        )
 
         _ = self.annotator.annotate_text(
             text,
@@ -1326,7 +1373,9 @@ class CrossChunkContextTest(absltest.TestCase):
             empty_response,  # Doc2 chunk1
             empty_response,  # Doc2 chunk2
         ]
-        resolver = resolver_lib.Resolver(format_type=data.FormatType.YAML)
+        resolver = resolver_lib.Resolver(
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
+        )
 
         _ = list(
             self.annotator.annotate_documents(

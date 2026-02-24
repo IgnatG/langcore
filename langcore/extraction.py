@@ -171,7 +171,16 @@ def _build_extraction_components(
             "max_workers": max_workers,
         }
 
-        base_lm_kwargs.update(language_model_params or {})
+        lm_params = dict(language_model_params or {})
+        if "gemini_schema" in lm_params:
+            warnings.warn(
+                "'gemini_schema' in language_model_params is deprecated. "
+                "Use 'use_schema_constraints=True' with examples instead, "
+                "which automatically generates and applies the schema.",
+                FutureWarning,
+                stacklevel=2,
+            )
+        base_lm_kwargs.update(lm_params)
 
         filtered_kwargs = {k: v for k, v in base_lm_kwargs.items() if v is not None}
 
@@ -247,6 +256,8 @@ def _compute_reliability(
             ``pydantic_retry`` has already validated the result.
     """
     if reliability_config is False:
+        return
+    if not isinstance(result, data.AnnotatedDocument):
         return
     cfg = (
         reliability_config
@@ -959,25 +970,25 @@ async def async_extract(
                 )
                 for i, doc_result in enumerate(doc_results):
                     if schema is not None and effective_retries > 0:
-                        doc_results[
-                            i
-                        ] = await _pydantic_validation.async_pydantic_retry(
-                            doc_result,
-                            schema,
-                            annotator,
-                            res,
-                            max_char_buffer=max_char_buffer,
-                            batch_length=batch_length,
-                            additional_context=additional_context,
-                            debug=debug,
-                            extraction_passes=extraction_passes,
-                            context_window_chars=context_window_chars,
-                            show_progress=show_progress,
-                            max_workers=max_workers,
-                            tokenizer=tokenizer,
-                            alignment_kwargs=alignment_kwargs,
-                            hooks=_hooks,
-                            max_retries=effective_retries,
+                        doc_results[i] = (
+                            await _pydantic_validation.async_pydantic_retry(
+                                doc_result,
+                                schema,
+                                annotator,
+                                res,
+                                max_char_buffer=max_char_buffer,
+                                batch_length=batch_length,
+                                additional_context=additional_context,
+                                debug=debug,
+                                extraction_passes=extraction_passes,
+                                context_window_chars=context_window_chars,
+                                show_progress=show_progress,
+                                max_workers=max_workers,
+                                tokenizer=tokenizer,
+                                alignment_kwargs=alignment_kwargs,
+                                hooks=_hooks,
+                                max_retries=effective_retries,
+                            )
                         )
                     _compute_reliability(
                         doc_results[i],
@@ -1088,25 +1099,25 @@ async def async_extract(
             if schema is not None and effective_retries > 0:
                 for i, doc in enumerate(result_list):
                     if doc.text is not None:
-                        result_list[
-                            i
-                        ] = await _pydantic_validation.async_pydantic_retry(
-                            doc,
-                            schema,
-                            annotator,
-                            res,
-                            max_char_buffer=max_char_buffer,
-                            batch_length=batch_length,
-                            additional_context=additional_context,
-                            debug=debug,
-                            extraction_passes=extraction_passes,
-                            context_window_chars=context_window_chars,
-                            show_progress=show_progress,
-                            max_workers=max_workers,
-                            tokenizer=tokenizer,
-                            alignment_kwargs=alignment_kwargs,
-                            hooks=_hooks,
-                            max_retries=effective_retries,
+                        result_list[i] = (
+                            await _pydantic_validation.async_pydantic_retry(
+                                doc,
+                                schema,
+                                annotator,
+                                res,
+                                max_char_buffer=max_char_buffer,
+                                batch_length=batch_length,
+                                additional_context=additional_context,
+                                debug=debug,
+                                extraction_passes=extraction_passes,
+                                context_window_chars=context_window_chars,
+                                show_progress=show_progress,
+                                max_workers=max_workers,
+                                tokenizer=tokenizer,
+                                alignment_kwargs=alignment_kwargs,
+                                hooks=_hooks,
+                                max_retries=effective_retries,
+                            )
                         )
             for doc in result_list:
                 _compute_reliability(

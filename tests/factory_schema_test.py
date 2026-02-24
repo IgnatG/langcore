@@ -6,6 +6,7 @@ from absl.testing import absltest
 
 from langcore import factory, schema
 from langcore.core import base_model, data
+from langcore.providers import schemas
 
 
 class FactorySchemaIntegrationTest(absltest.TestCase):
@@ -199,7 +200,7 @@ class SchemaApplicationTest(absltest.TestCase):
         class SchemaAwareModel(base_model.BaseLanguageModel):
             @classmethod
             def get_schema_class(cls):
-                return schema.GeminiSchema
+                return schemas.gemini.GeminiSchema
 
             def infer(self, batch_prompts, **kwargs):
                 yield []
@@ -221,7 +222,7 @@ class SchemaApplicationTest(absltest.TestCase):
 
                 mock_apply.assert_called_once()
                 schema_arg = mock_apply.call_args[0][0]
-                self.assertIsInstance(schema_arg, schema.GeminiSchema)
+                self.assertIsInstance(schema_arg, schemas.gemini.GeminiSchema)
 
 
 if __name__ == "__main__":

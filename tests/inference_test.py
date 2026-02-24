@@ -18,6 +18,7 @@ from langcore.core import base_model, data, types
 from langcore.providers import gemini, ollama, openai
 
 HAS_OPENAI = importlib.util.find_spec("openai") is not None
+HAS_GOOGLE = importlib.util.find_spec("google") is not None
 
 
 class TestBaseLanguageModel(absltest.TestCase):
@@ -328,6 +329,7 @@ class TestOllamaLanguageModel(absltest.TestCase):
             )
 
 
+@unittest.skipUnless(HAS_GOOGLE, "google-genai package not installed")
 class TestGeminiLanguageModel(absltest.TestCase):
     @mock.patch("google.genai.Client")
     def test_gemini_allowlist_filtering(self, mock_client_class):

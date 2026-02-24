@@ -81,6 +81,7 @@ class FormatModeSchema(BaseSchema):
     def __init__(self, format_type: types.FormatType = types.FormatType.JSON):
         """Initialize with a format type."""
         self.format_type = format_type
+        self._format = "json" if format_type == types.FormatType.JSON else "yaml"
 
     @classmethod
     def from_examples(

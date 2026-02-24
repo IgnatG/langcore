@@ -18,7 +18,7 @@ import pytest
 
 from langcore import annotation, extraction, prompting
 from langcore import resolver as resolver_lib
-from langcore.core import base_model, data, types
+from langcore.core import base_model, data, format_handler as fh, types
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@ class TestAsyncAnnotateText:
         model = FakeLanguageModel(responses=[SAMPLE_YAML_RESPONSE])
         annotator = _make_annotator(model)
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 
@@ -135,7 +135,7 @@ class TestAsyncAnnotateText:
         sync_model = FakeLanguageModel(responses=responses)
         sync_annotator = _make_annotator(sync_model)
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
         sync_result = sync_annotator.annotate_text(text=SAMPLE_TEXT, resolver=resolver)
@@ -160,7 +160,7 @@ class TestAsyncAnnotateDocuments:
         model = FakeLanguageModel(responses=[SAMPLE_YAML_RESPONSE] * 4)
         annotator = _make_annotator(model)
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 
@@ -190,7 +190,7 @@ class TestAsyncMultiPassEarlyStopping:
         model = FakeLanguageModel(responses=[SAMPLE_YAML_RESPONSE] * 10)
         annotator = _make_annotator(model)
         resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.YAML,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 

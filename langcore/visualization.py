@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import hashlib
 import html
 import itertools
 import json
@@ -19,6 +20,9 @@ import textwrap
 
 from langcore import io
 from langcore.core import data
+
+# Module-level render cache: maps content hash → rendered HTML string.
+_render_cache: dict[str, str] = {}
 
 # Fallback if IPython is not present
 try:
@@ -59,7 +63,8 @@ _PALETTE: list[str] = [
     "#DDE8E8",  # Pale Cyan (Cyan Container)
 ]
 
-_VISUALIZATION_CSS = textwrap.dedent("""\
+_VISUALIZATION_CSS = textwrap.dedent(
+    """\
     <style>
     .lx-highlight { position: relative; border-radius:3px; padding:1px 2px;}
     .lx-highlight .lx-tooltip {
@@ -159,7 +164,8 @@ _VISUALIZATION_CSS = textwrap.dedent("""\
     .lx-gif-optimized .lx-text-window { font-size: 16px; line-height: 1.8; }
     .lx-gif-optimized .lx-attributes-panel { font-size: 15px; }
     .lx-gif-optimized .lx-current-highlight { text-decoration-thickness: 4px; }
-    </style>""")
+    </style>"""
+)
 
 
 def _assign_colors(extractions: list[data.Extraction]) -> dict[str, str]:
@@ -348,15 +354,15 @@ def _prepare_extraction_data(
     extraction_data = []
     for i, extraction in enumerate(extractions):
         # Assertions to inform pytype about the invariants guaranteed by _filter_valid_extractions
-        assert extraction.char_interval is not None, (
-            "char_interval must be non-None for valid extractions"
-        )
-        assert extraction.char_interval.start_pos is not None, (
-            "start_pos must be non-None for valid extractions"
-        )
-        assert extraction.char_interval.end_pos is not None, (
-            "end_pos must be non-None for valid extractions"
-        )
+        assert (
+            extraction.char_interval is not None
+        ), "char_interval must be non-None for valid extractions"
+        assert (
+            extraction.char_interval.start_pos is not None
+        ), "start_pos must be non-None for valid extractions"
+        assert (
+            extraction.char_interval.end_pos is not None
+        ), "end_pos must be non-None for valid extractions"
 
         start_pos = extraction.char_interval.start_pos
         end_pos = extraction.char_interval.end_pos
@@ -436,7 +442,8 @@ def _build_visualization_html(
     ), "first extraction must have valid char_interval with start_pos and end_pos"
     pos_info_str = f"[{first_extraction.char_interval.start_pos}-{first_extraction.char_interval.end_pos}]"
 
-    html_content = textwrap.dedent(f"""
+    html_content = textwrap.dedent(
+        f"""
     <div class="lx-animated-wrapper">
       <div class="lx-attributes-panel">
         {legend_html}
@@ -525,7 +532,8 @@ def _build_visualization_html(
 
         updateDisplay();
       }})();
-    </script>""")
+    </script>"""
+    )
 
     return html_content
 
@@ -571,6 +579,16 @@ def visualize(
     if annotated_doc.extractions is None:
         raise ValueError("annotated_doc must contain extractions to visualise.")
 
+    # Build a cache key from the inputs that affect the rendered output.
+    _cache_key = hashlib.sha256(
+        f"{id(annotated_doc)}|{animation_speed}|{show_legend}|{gif_optimized}".encode()
+    ).hexdigest()
+    cached = _render_cache.get(_cache_key)
+    if cached is not None:
+        if HTML is not None and _is_jupyter():
+            return HTML(cached)
+        return cached
+
     # Filter valid extractions - show ALL of them
     valid_extractions = _filter_valid_extractions(annotated_doc.extractions)
 
@@ -580,6 +598,7 @@ def visualize(
             " animate.</p></div>"
         )
         full_html = _VISUALIZATION_CSS + empty_html
+        _render_cache[_cache_key] = full_html
         if HTML is not None and _is_jupyter():
             return HTML(full_html)
         return full_html
@@ -602,6 +621,8 @@ def visualize(
             'class="lx-animated-wrapper"',
             'class="lx-animated-wrapper lx-gif-optimized"',
         )
+
+    _render_cache[_cache_key] = full_html
 
     if HTML is not None and _is_jupyter():
         return HTML(full_html)

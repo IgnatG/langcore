@@ -222,6 +222,11 @@ class OllamaLanguageModel(base_model.BaseLanguageModel):
           Lists of ScoredOutputs.
         """
         combined_kwargs = self.merge_kwargs(kwargs)
+        # Remove keys that are passed explicitly to _ollama_query to avoid
+        # duplicate-keyword errors.
+        combined_kwargs.pop("structured_output_format", None)
+        combined_kwargs.pop("model_url", None)
+        combined_kwargs.pop("model", None)
 
         for prompt in batch_prompts:
             try:

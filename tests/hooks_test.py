@@ -32,7 +32,7 @@ class TestHookName:
 
     def test_enum_count(self) -> None:
         """Ensure no events were accidentally removed."""
-        assert len(HookName) == 6
+        assert len(HookName) == 8
 
 
 # =============================================================================

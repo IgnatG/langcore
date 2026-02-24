@@ -33,6 +33,7 @@ Fuzzy matching::
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import difflib
 import logging
@@ -128,24 +129,42 @@ def _extraction_key(ext: Extraction) -> str:
 
     The key is ``class|text`` lower-cased and whitespace-collapsed so
     that minor formatting differences don't cause false negatives.
+
+    Results are memorised on the ``Extraction`` instance via a
+    ``_cached_key`` attribute to avoid re-computing the same string
+    operations when the same object is passed through multiple metrics.
     """
+    cached = getattr(ext, "_cached_key", None)
+    if cached is not None:
+        return cached
     cls = (ext.extraction_class or "").strip().lower()
     txt = " ".join((ext.extraction_text or "").split()).lower()
-    return f"{cls}|{txt}"
+    key = f"{cls}|{txt}"
+    with contextlib.suppress(AttributeError, TypeError):
+        ext._cached_key = key  # type: ignore[attr-defined]
+    return key
 
 
 def _extraction_key_with_attrs(ext: Extraction) -> str:
     """Build a key that also includes sorted attribute pairs.
 
     Used for stricter matching when field-level metrics are requested.
+
+    Like ``_extraction_key``, results are memoised on the instance.
     """
+    cached = getattr(ext, "_cached_key_attrs", None)
+    if cached is not None:
+        return cached
     base = _extraction_key(ext)
     if not ext.attributes:
         return base
     attr_parts = sorted(
         f"{k}={str(v).strip().lower()}" for k, v in ext.attributes.items()
     )
-    return f"{base}||{'|'.join(attr_parts)}"
+    key = f"{base}||{'|'.join(attr_parts)}"
+    with contextlib.suppress(AttributeError, TypeError):
+        ext._cached_key_attrs = key  # type: ignore[attr-defined]
+    return key
 
 
 def _field_keys(

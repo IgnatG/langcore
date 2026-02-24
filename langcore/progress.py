@@ -2,10 +2,38 @@
 
 from __future__ import annotations
 
+import contextlib
 import urllib.parse
 from typing import Any
 
 import tqdm
+
+
+class _NoOpProgressBar(contextlib.nullcontext):
+    """Lightweight stand-in for a disabled tqdm bar.
+
+    Avoids the overhead of allocating a real ``tqdm`` object (internal
+    lock, format meter, etc.) when the progress bar is disabled.
+    """
+
+    def __init__(self, iterable: Any = None, **_kwargs: Any) -> None:
+        super().__init__(enter_result=self)
+        self._iterable = iterable
+        self.n: int = 0
+        self.total: int | None = None
+
+    def __iter__(self):
+        return iter(self._iterable) if self._iterable is not None else iter([])
+
+    def update(self, n: int = 1) -> None:
+        pass
+
+    def set_postfix_str(self, s: str = "", **_kw: Any) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
 
 # ANSI color codes for terminal output
 BLUE = "\033[94m"
@@ -75,13 +103,16 @@ def create_extraction_progress_bar(
     Returns:
       A configured tqdm progress bar.
     """
+    if disable:
+        return _NoOpProgressBar(iterable)
+
     desc = format_extraction_progress(model_info)
 
     return tqdm.tqdm(
         iterable,
         desc=desc,
         bar_format="{desc} [{elapsed}]",
-        disable=disable,
+        disable=False,
         dynamic_ncols=True,
     )
 
@@ -156,11 +187,14 @@ def create_save_progress_bar(output_path: str, disable: bool = False) -> tqdm.tq
     Returns:
       A configured tqdm progress bar.
     """
+    if disable:
+        return _NoOpProgressBar()
+
     filename = output_path.split("/")[-1]
     return tqdm.tqdm(
         desc=f"{BLUE}{BOLD}LangCore{RESET}: Saving to {GREEN}{filename}{RESET}",
         unit=" docs",
-        disable=disable,
+        disable=False,
     )
 
 
@@ -177,6 +211,9 @@ def create_load_progress_bar(
     Returns:
       A configured tqdm progress bar.
     """
+    if disable:
+        return _NoOpProgressBar()
+
     filename = file_path.split("/")[-1]
     if total_size:
         return tqdm.tqdm(
@@ -184,13 +221,13 @@ def create_load_progress_bar(
             desc=f"{BLUE}{BOLD}LangCore{RESET}: Loading {GREEN}{filename}{RESET}",
             unit="B",
             unit_scale=True,
-            disable=disable,
+            disable=False,
         )
     else:
         return tqdm.tqdm(
             desc=f"{BLUE}{BOLD}LangCore{RESET}: Loading {GREEN}{filename}{RESET}",
             unit=" docs",
-            disable=disable,
+            disable=False,
         )
 
 
@@ -312,6 +349,9 @@ def create_pass_progress_bar(total_passes: int, disable: bool = False) -> tqdm.t
     Returns:
       A configured tqdm progress bar.
     """
+    if disable:
+        return _NoOpProgressBar()
+
     desc = f"{BLUE}{BOLD}LangCore{RESET}: Extraction passes"
     return tqdm.tqdm(
         total=total_passes,
@@ -319,7 +359,7 @@ def create_pass_progress_bar(total_passes: int, disable: bool = False) -> tqdm.t
         bar_format=(
             "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
         ),
-        disable=disable,
+        disable=False,
         colour=GOOGLE_BLUE,
         ncols=100,
     )

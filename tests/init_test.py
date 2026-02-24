@@ -71,6 +71,7 @@ class InitTest(parameterized.TestCase):
                     description=None,
                     attributes={"class": "medication"},
                     confidence_score=1.0,
+                    reliability_score=1.0,
                 ),
                 data.Extraction(
                     extraction_class="entity",
@@ -82,6 +83,7 @@ class InitTest(parameterized.TestCase):
                     description=None,
                     attributes={"frequency": "every morning", "class": "dosage"},
                     confidence_score=1.0,
+                    reliability_score=1.0,
                 ),
             ],
             text="Patient takes Aspirin 100mg every morning.",

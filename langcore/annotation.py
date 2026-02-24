@@ -342,7 +342,9 @@ class Annotator:
           ValueError: If there are no scored outputs during inference.
         """
         if resolver is None:
-            resolver = resolver_lib.Resolver(format_type=data.FormatType.YAML)
+            resolver = resolver_lib.Resolver(
+                format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
+            )
 
         if extraction_passes == 1:
             yield from self._annotate_documents_single_pass(
@@ -704,7 +706,7 @@ class Annotator:
         """
         if resolver is None:
             resolver = resolver_lib.Resolver(
-                format_type=data.FormatType.YAML,
+                format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
             )
 
         start_time = time.time() if debug else None
@@ -731,9 +733,9 @@ class Annotator:
                 **kwargs,
             )
         )
-        assert len(annotations) == 1, (
-            f"Expected 1 annotation but got {len(annotations)} annotations."
-        )
+        assert (
+            len(annotations) == 1
+        ), f"Expected 1 annotation but got {len(annotations)} annotations."
 
         if debug and annotations[0].extractions:
             elapsed_time = time.time() - start_time if start_time else None
@@ -796,7 +798,9 @@ class Annotator:
           List of AnnotatedDocument results.
         """
         if resolver is None:
-            resolver = resolver_lib.Resolver(format_type=data.FormatType.YAML)
+            resolver = resolver_lib.Resolver(
+                format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
+            )
 
         if extraction_passes == 1:
             return await self._async_annotate_documents_single_pass(
@@ -1070,9 +1074,9 @@ class Annotator:
                     document_usage[doc_id]["prompt_tokens"] += annotated_doc.usage.get(
                         "prompt_tokens", 0
                     )
-                    document_usage[doc_id]["completion_tokens"] += (
-                        annotated_doc.usage.get("completion_tokens", 0)
-                    )
+                    document_usage[doc_id][
+                        "completion_tokens"
+                    ] += annotated_doc.usage.get("completion_tokens", 0)
                     document_usage[doc_id]["total_tokens"] += annotated_doc.usage.get(
                         "total_tokens", 0
                     )
@@ -1165,7 +1169,9 @@ class Annotator:
           An AnnotatedDocument with the extracted information.
         """
         if resolver is None:
-            resolver = resolver_lib.Resolver(format_type=data.FormatType.YAML)
+            resolver = resolver_lib.Resolver(
+                format_handler=fh.FormatHandler(format_type=data.FormatType.YAML),
+            )
 
         start_time = time.time() if debug else None
 
@@ -1189,9 +1195,9 @@ class Annotator:
             tokenizer=tokenizer,
             **kwargs,
         )
-        assert len(annotations) == 1, (
-            f"Expected 1 annotation but got {len(annotations)} annotations."
-        )
+        assert (
+            len(annotations) == 1
+        ), f"Expected 1 annotation but got {len(annotations)} annotations."
 
         if debug and annotations[0].extractions:
             elapsed_time = time.time() - start_time if start_time else None
