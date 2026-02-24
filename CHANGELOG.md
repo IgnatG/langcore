@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.2 (2026-02-24)
+
+### Bug Fixes
+
+- Simplify class definition and improve terminal state handling in gemini provider
+  ([`c7f3253`](https://github.com/IgnatG/langcore/commit/c7f32534567dfa27adee75757a0ccb83af923d30))
+
+
 ## v1.1.1 (2026-02-24)
 
 ### Bug Fixes
