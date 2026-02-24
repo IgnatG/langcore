@@ -82,13 +82,22 @@ def evaluate(*args: Any, **kwargs: Any):
 
     Convenience wrapper around ``ExtractionMetrics.evaluate()``.
     Accepts the same arguments as ``ExtractionMetrics.evaluate()``
-    plus an optional ``schema`` keyword for per-field breakdown.
+    plus optional keyword arguments for the ``ExtractionMetrics``
+    constructor: ``schema``, ``strict_attributes``, ``averaging``,
+    and ``fuzzy_threshold``.
     """
     from langcore.evaluation import ExtractionMetrics
 
     schema = kwargs.pop("schema", None)
     strict_attributes = kwargs.pop("strict_attributes", False)
-    metrics = ExtractionMetrics(schema=schema, strict_attributes=strict_attributes)
+    averaging = kwargs.pop("averaging", "macro")
+    fuzzy_threshold = kwargs.pop("fuzzy_threshold", None)
+    metrics = ExtractionMetrics(
+        schema=schema,
+        strict_attributes=strict_attributes,
+        averaging=averaging,
+        fuzzy_threshold=fuzzy_threshold,
+    )
     return metrics.evaluate(*args, **kwargs)
 
 

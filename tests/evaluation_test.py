@@ -476,3 +476,183 @@ class TestLxEvaluate:
             strict_attributes=True,
         )
         assert report.true_positives == 0
+
+    def test_lx_evaluate_averaging_micro(self) -> None:
+        import langcore as lx
+
+        preds = [[_ext("A", "x")], [_ext("B", "y"), _ext("B", "z")]]
+        gt = [[_ext("A", "x")], [_ext("B", "y")]]
+        report = lx.evaluate(predictions=preds, ground_truth=gt, averaging="micro")
+        assert report.averaging == "micro"
+
+    def test_lx_evaluate_fuzzy(self) -> None:
+        import langcore as lx
+
+        preds = [_ext("A", "hello world")]
+        gt = [_ext("A", "hello worl")]  # close but not exact
+        report = lx.evaluate(
+            predictions=preds,
+            ground_truth=gt,
+            fuzzy_threshold=0.8,
+        )
+        assert report.true_positives == 1
+
+
+# ================================================================== #
+# Averaging modes
+# ================================================================== #
+
+
+class TestAveragingModes:
+    """Tests for macro / micro / weighted averaging."""
+
+    def test_macro_is_default(self) -> None:
+        m = ExtractionMetrics()
+        report = m.evaluate([_ext("A", "x")], [_ext("A", "x")])
+        assert report.averaging == "macro"
+
+    def test_micro_averaging_equal_docs(self) -> None:
+        """Micro averages per-doc scores equally."""
+        # Doc 1: perfect match (P=R=F1=1)
+        # Doc 2: zero match (P=R=F1=0)
+        preds = [[_ext("A", "x")], [_ext("B", "z")]]
+        gt = [[_ext("A", "x")], [_ext("B", "y")]]
+
+        report = ExtractionMetrics(averaging="micro").evaluate(preds, gt)
+        assert report.averaging == "micro"
+        # Mean of [1.0, 0.0] = 0.5
+        assert report.precision == pytest.approx(0.5, abs=1e-3)
+        assert report.recall == pytest.approx(0.5, abs=1e-3)
+        assert report.f1 == pytest.approx(0.5, abs=1e-3)
+
+    def test_weighted_averaging(self) -> None:
+        """Weighted averages per-doc scores by GT count."""
+        # Doc 1 (1 GT): perfect match → P=R=F1=1.0, weight=1
+        # Doc 2 (3 GT): zero match → P=R=F1=0.0, weight=3
+        preds = [[_ext("A", "x")], [_ext("B", "z")]]
+        gt = [[_ext("A", "x")], [_ext("B", "a"), _ext("B", "b"), _ext("B", "c")]]
+
+        report = ExtractionMetrics(averaging="weighted").evaluate(preds, gt)
+        assert report.averaging == "weighted"
+        # Weighted precision: (1.0*1 + 0.0*3) / 4 = 0.25
+        assert report.precision == pytest.approx(0.25, abs=1e-3)
+        # Weighted recall: (1.0*1 + 0.0*3) / 4 = 0.25
+        assert report.recall == pytest.approx(0.25, abs=1e-3)
+
+    def test_macro_pools_all_extractions(self) -> None:
+        """Macro pools everything together (ignores document boundaries)."""
+        # Doc 1: 1 pred matches 1 GT
+        # Doc 2: 1 pred does not match 1 GT
+        preds = [[_ext("A", "x")], [_ext("B", "z")]]
+        gt = [[_ext("A", "x")], [_ext("B", "y")]]
+
+        report = ExtractionMetrics(averaging="macro").evaluate(preds, gt)
+        # Pooled: 2 preds, 2 GTs, 1 TP → P=0.5, R=0.5
+        assert report.precision == pytest.approx(0.5, abs=1e-3)
+        assert report.recall == pytest.approx(0.5, abs=1e-3)
+
+    def test_micro_single_document_same_as_macro(self) -> None:
+        """With a single document, micro == macro."""
+        preds = [_ext("A", "x"), _ext("A", "y")]
+        gt = [_ext("A", "x"), _ext("A", "z")]
+
+        r_macro = ExtractionMetrics(averaging="macro").evaluate(preds, gt)
+        r_micro = ExtractionMetrics(averaging="micro").evaluate(preds, gt)
+        assert r_macro.f1 == pytest.approx(r_micro.f1, abs=1e-4)
+
+    def test_weighted_empty_docs(self) -> None:
+        """Weighted with empty GT → zeros."""
+        report = ExtractionMetrics(averaging="weighted").evaluate([], [])
+        assert report.f1 == 0.0
+
+    def test_invalid_averaging_raises(self) -> None:
+        """Unknown averaging mode raises ValueError."""
+        m = ExtractionMetrics.__new__(ExtractionMetrics)
+        m._schema = None
+        m._strict = False
+        m._averaging = "invalid"  # type: ignore[assignment]
+        m._fuzzy = None
+        with pytest.raises(ValueError, match="Unknown averaging mode"):
+            m.evaluate([_ext("A", "x")], [_ext("A", "x")])
+
+    def test_per_document_always_populated(self) -> None:
+        """per_document is populated regardless of averaging mode."""
+        preds = [[_ext("A", "x")], [_ext("B", "y")]]
+        gt = [[_ext("A", "x")], [_ext("B", "y")]]
+        for mode in ("macro", "micro", "weighted"):
+            report = ExtractionMetrics(averaging=mode).evaluate(preds, gt)
+            assert len(report.per_document) == 2
+
+
+# ================================================================== #
+# Fuzzy matching
+# ================================================================== #
+
+
+class TestFuzzyMatching:
+    """Tests for fuzzy threshold feature."""
+
+    def test_exact_match_no_fuzzy(self) -> None:
+        """Without fuzzy, near-misses don't match."""
+        preds = [_ext("A", "hello world")]
+        gt = [_ext("A", "hello worl")]
+        report = ExtractionMetrics().evaluate(preds, gt)
+        assert report.true_positives == 0
+
+    def test_fuzzy_matches_near_strings(self) -> None:
+        """Fuzzy threshold allows near-matches."""
+        preds = [_ext("A", "hello world")]
+        gt = [_ext("A", "hello worl")]
+        report = ExtractionMetrics(fuzzy_threshold=0.8).evaluate(preds, gt)
+        assert report.true_positives == 1
+
+    def test_fuzzy_rejects_distant_strings(self) -> None:
+        """Fuzzy does not match very different strings."""
+        preds = [_ext("A", "hello world")]
+        gt = [_ext("A", "completely different")]
+        report = ExtractionMetrics(fuzzy_threshold=0.8).evaluate(preds, gt)
+        assert report.true_positives == 0
+
+    def test_fuzzy_threshold_1_equals_exact(self) -> None:
+        """fuzzy_threshold=1.0 behaves like exact matching."""
+        preds = [_ext("A", "hello")]
+        gt = [_ext("A", "hello")]
+        report = ExtractionMetrics(fuzzy_threshold=1.0).evaluate(preds, gt)
+        assert report.true_positives == 1
+
+    def test_fuzzy_threshold_validation_zero(self) -> None:
+        """fuzzy_threshold=0 raises ValueError."""
+        with pytest.raises(ValueError, match="fuzzy_threshold"):
+            ExtractionMetrics(fuzzy_threshold=0.0)
+
+    def test_fuzzy_threshold_validation_negative(self) -> None:
+        """Negative fuzzy_threshold raises ValueError."""
+        with pytest.raises(ValueError, match="fuzzy_threshold"):
+            ExtractionMetrics(fuzzy_threshold=-0.5)
+
+    def test_fuzzy_threshold_validation_over_one(self) -> None:
+        """fuzzy_threshold > 1 raises ValueError."""
+        with pytest.raises(ValueError, match="fuzzy_threshold"):
+            ExtractionMetrics(fuzzy_threshold=1.5)
+
+    def test_fuzzy_with_compute_prf_directly(self) -> None:
+        """_compute_prf accepts fuzzy_threshold kwarg."""
+        # "abcde" vs "abcdf" → 80% similar (4/5 chars match)
+        _p, _r, _f, tp = _compute_prf(["abcde"], ["abcdf"], fuzzy_threshold=0.7)
+        assert tp == 1
+
+    def test_fuzzy_greedy_best_match(self) -> None:
+        """Fuzzy selects the best match (greedy), not first pass."""
+        # pred "abc" should match gt "abd" better than gt "xyz"
+        _p, _r, _f, tp = _compute_prf(["abc"], ["xyz", "abd"], fuzzy_threshold=0.5)
+        assert tp == 1
+
+    def test_fuzzy_with_micro_averaging(self) -> None:
+        """Fuzzy works correctly with micro averaging."""
+        preds = [[_ext("A", "hello world")], [_ext("B", "foobar")]]
+        gt = [[_ext("A", "hello worl")], [_ext("B", "foobaz")]]
+        report = ExtractionMetrics(averaging="micro", fuzzy_threshold=0.8).evaluate(
+            preds, gt
+        )
+        assert report.true_positives == 2
+        assert report.f1 == pytest.approx(1.0, abs=1e-3)

@@ -13,19 +13,41 @@ Typical usage::
     report = metrics.evaluate(predictions=results, ground_truth=expected)
     print(report.f1)          # 0.92
     print(report.per_field)   # {"invoice_number": 0.98, "amount": 0.88}
+
+Averaging modes::
+
+    # Macro (default) — compute P/R/F1 across all extractions at once
+    metrics = ExtractionMetrics(averaging="macro")
+
+    # Micro — compute P/R/F1 per document, then average
+    metrics = ExtractionMetrics(averaging="micro")
+
+    # Weighted — per-document P/R/F1 weighted by ground-truth count
+    metrics = ExtractionMetrics(averaging="weighted")
+
+Fuzzy matching::
+
+    # Allow near-matches with ≥80% similarity
+    metrics = ExtractionMetrics(fuzzy_threshold=0.8)
 """
 
 from __future__ import annotations
 
 import dataclasses
+import difflib
 import logging
 from collections.abc import Sequence
+from typing import Literal
 
 import pydantic
 
 from langcore.core.data import AnnotatedDocument, Extraction
 
+# Type alias for the averaging strategy.
+AveragingMode = Literal["macro", "micro", "weighted"]
+
 __all__ = [
+    "AveragingMode",
     "EvaluationReport",
     "ExtractionMetrics",
     "FieldReport",
@@ -64,14 +86,16 @@ class EvaluationReport:
     """Full evaluation report with aggregate and per-field metrics.
 
     Attributes:
-        precision: Macro precision across all extractions.
-        recall: Macro recall across all extractions.
-        f1: Macro F1 score.
+        precision: Aggregate precision.
+        recall: Aggregate recall.
+        f1: Aggregate F1 score.
         accuracy: Fraction of ground-truth extractions exactly
             matched by predictions.
         total_predictions: Total predicted extractions evaluated.
         total_ground_truth: Total ground-truth extractions evaluated.
         true_positives: Number of matching extraction pairs.
+        averaging: The averaging strategy used (``"macro"``,
+            ``"micro"``, or ``"weighted"``).
         per_field: Per-field ``FieldReport`` breakdown, keyed by
             field name.  Empty when no schema is provided.
         per_document: Optional list of per-document ``(precision,
@@ -85,6 +109,7 @@ class EvaluationReport:
     total_predictions: int
     total_ground_truth: int
     true_positives: int
+    averaging: str = "macro"
     per_field: dict[str, FieldReport] = dataclasses.field(
         default_factory=dict,
     )
@@ -223,21 +248,41 @@ def _flatten_per_document(
 def _compute_prf(
     pred_keys: list[str],
     gt_keys: list[str],
+    *,
+    fuzzy_threshold: float | None = None,
 ) -> tuple[float, float, float, int]:
     """Compute precision, recall, F1 and true-positive count.
 
     Uses multiset (bag) matching: each ground-truth key can be matched
     at most once, preserving correct counts when duplicates exist.
 
+    When *fuzzy_threshold* is set (a float in ``(0, 1]``), keys are
+    compared using ``difflib.SequenceMatcher``.  A prediction matches a
+    ground-truth key when the similarity ratio meets or exceeds the
+    threshold.  Exact matching (the default) uses plain ``==``.
+
     Returns:
         ``(precision, recall, f1, true_positives)``
     """
     gt_remaining = list(gt_keys)
     tp = 0
-    for pk in pred_keys:
-        if pk in gt_remaining:
-            gt_remaining.remove(pk)
-            tp += 1
+    if fuzzy_threshold is not None and fuzzy_threshold < 1.0:
+        for pk in pred_keys:
+            best_idx: int | None = None
+            best_ratio = 0.0
+            for i, gk in enumerate(gt_remaining):
+                ratio = difflib.SequenceMatcher(None, pk, gk).ratio()
+                if ratio >= fuzzy_threshold and ratio > best_ratio:
+                    best_ratio = ratio
+                    best_idx = i
+            if best_idx is not None:
+                gt_remaining.pop(best_idx)
+                tp += 1
+    else:
+        for pk in pred_keys:
+            if pk in gt_remaining:
+                gt_remaining.remove(pk)
+                tp += 1
 
     precision = tp / len(pred_keys) if pred_keys else 0.0
     recall = tp / len(gt_keys) if gt_keys else 0.0
@@ -267,7 +312,24 @@ class ExtractionMetrics:
             model field to its own precision / recall / F1.
         strict_attributes: If ``True``, matching also considers
             attribute values (not just class + text).  Defaults to
-            ``False``.
+            ``False``, so extractions match as long as their
+            ``extraction_class`` and ``extraction_text`` agree (after
+            normalisation).  Set ``True`` when you need to verify that
+            attribute values also match exactly.
+        averaging: Aggregation strategy for multi-document evaluation:
+
+            * ``\"macro\"`` (default) — compute P/R/F1 across *all*
+              extractions pooled together (flat).
+            * ``\"micro\"`` — compute P/R/F1 per document first, then
+              take the unweighted arithmetic mean.
+            * ``\"weighted\"`` — compute P/R/F1 per document, then
+              take a weighted mean where each document's weight is its
+              ground-truth count.
+        fuzzy_threshold: When set to a float in ``(0, 1]``, enables
+            fuzzy string matching instead of exact equality.  Two
+            extraction keys are considered a match when their
+            ``difflib.SequenceMatcher`` ratio meets or exceeds this
+            threshold.  ``None`` (default) uses exact matching.
     """
 
     def __init__(
@@ -275,9 +337,17 @@ class ExtractionMetrics:
         schema: type[pydantic.BaseModel] | None = None,
         *,
         strict_attributes: bool = False,
+        averaging: AveragingMode = "macro",
+        fuzzy_threshold: float | None = None,
     ) -> None:
         self._schema = schema
         self._strict = strict_attributes
+        self._averaging: AveragingMode = averaging
+        if fuzzy_threshold is not None and not 0 < fuzzy_threshold <= 1.0:
+            raise ValueError(
+                f"fuzzy_threshold must be in (0, 1] or None, got {fuzzy_threshold}"
+            )
+        self._fuzzy = fuzzy_threshold
 
     # ------------------------------------------------------------------ #
     # Convenience static helpers
@@ -385,6 +455,14 @@ class ExtractionMetrics:
     ) -> EvaluationReport:
         """Run a full evaluation and return an ``EvaluationReport``.
 
+        The ``averaging`` strategy (set in the constructor) controls how
+        multi-document metrics are aggregated:
+
+        * **macro** — pool all extractions, compute P/R/F1 once.
+        * **micro** — compute P/R/F1 per document, average equally.
+        * **weighted** — compute P/R/F1 per document, weighted by
+          ground-truth count.
+
         Parameters:
             predictions: Predicted extractions in any supported shape
                 (flat list, per-document lists, or ``AnnotatedDocument``).
@@ -395,26 +473,23 @@ class ExtractionMetrics:
             per-field metrics.
         """
         key_fn = _extraction_key_with_attrs if self._strict else _extraction_key
+        fuzzy = self._fuzzy
 
-        # ---- aggregate ---- #
+        # ---- flat lists for totals ---- #
         pred_flat = _flatten(predictions)
         gt_flat = _flatten(ground_truth)
 
-        pred_keys = [key_fn(e) for e in pred_flat]
-        gt_keys = [key_fn(e) for e in gt_flat]
-
-        prec, rec, f1_val, tp = _compute_prf(pred_keys, gt_keys)
-        acc = tp / len(gt_keys) if gt_keys else (1.0 if not pred_keys else 0.0)
-
-        # ---- per-document ---- #
+        # ---- per-document breakdown (always computed) ---- #
         pred_docs = _flatten_per_document(predictions)
         gt_docs = _flatten_per_document(ground_truth)
 
         per_doc: list[dict[str, float]] = []
+        per_doc_tp = 0
         for pd_list, gt_list in zip(pred_docs, gt_docs):
             pk = [key_fn(e) for e in pd_list]
             gk = [key_fn(e) for e in gt_list]
-            dp, dr, df, _ = _compute_prf(pk, gk)
+            dp, dr, df, d_tp = _compute_prf(pk, gk, fuzzy_threshold=fuzzy)
+            per_doc_tp += d_tp
             per_doc.append(
                 {
                     "precision": round(dp, 4),
@@ -422,6 +497,56 @@ class ExtractionMetrics:
                     "f1": round(df, 4),
                 }
             )
+
+        # ---- aggregate metrics ---- #
+        if self._averaging == "macro":
+            pred_keys = [key_fn(e) for e in pred_flat]
+            gt_keys = [key_fn(e) for e in gt_flat]
+            prec, rec, f1_val, tp = _compute_prf(
+                pred_keys, gt_keys, fuzzy_threshold=fuzzy
+            )
+        elif self._averaging in ("micro", "weighted"):
+            # Per-document average
+            if not per_doc:
+                prec, rec, f1_val, tp = 0.0, 0.0, 0.0, 0
+            else:
+                if self._averaging == "micro":
+                    # Unweighted mean of per-document scores
+                    prec = sum(d["precision"] for d in per_doc) / len(per_doc)
+                    rec = sum(d["recall"] for d in per_doc) / len(per_doc)
+                    f1_val = sum(d["f1"] for d in per_doc) / len(per_doc)
+                else:
+                    # Weighted by ground-truth count
+                    total_weight = sum(len(gt_list) for gt_list in gt_docs)
+                    if total_weight == 0:
+                        prec, rec, f1_val = 0.0, 0.0, 0.0
+                    else:
+                        prec = (
+                            sum(
+                                d["precision"] * len(gt_list)
+                                for d, gt_list in zip(per_doc, gt_docs)
+                            )
+                            / total_weight
+                        )
+                        rec = (
+                            sum(
+                                d["recall"] * len(gt_list)
+                                for d, gt_list in zip(per_doc, gt_docs)
+                            )
+                            / total_weight
+                        )
+                        f1_val = (
+                            sum(
+                                d["f1"] * len(gt_list)
+                                for d, gt_list in zip(per_doc, gt_docs)
+                            )
+                            / total_weight
+                        )
+                tp = per_doc_tp
+        else:
+            raise ValueError(f"Unknown averaging mode: {self._averaging!r}")
+
+        acc = tp / len(gt_flat) if gt_flat else (1.0 if not pred_flat else 0.0)
 
         # ---- per-field ---- #
         per_field = self._compute_per_field(pred_flat, gt_flat)
@@ -434,6 +559,7 @@ class ExtractionMetrics:
             total_predictions=len(pred_flat),
             total_ground_truth=len(gt_flat),
             true_positives=tp,
+            averaging=self._averaging,
             per_field=per_field,
             per_document=per_doc,
         )

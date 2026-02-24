@@ -156,6 +156,8 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | **Per-document breakdown** | ✅ Per-document P/R/F1 dicts | ❌ | ❌ | ❌ |
 | **Pydantic schema integration** | ✅ `ExtractionMetrics(schema=Invoice)` | ❌ | ❌ | ❌ |
 | **Strict attribute matching** | ✅ `strict_attributes=True` | ❌ | ❌ | ❌ |
+| **Averaging modes** | ✅ Macro / micro / weighted | ❌ | ❌ | ❌ |
+| **Fuzzy matching** | ✅ `fuzzy_threshold` (difflib SequenceMatcher) | ❌ | ❌ | ❌ |
 | **Top-level convenience** | ✅ `lx.evaluate()` | ❌ | ❌ | ❌ |
 
 ### RAG Query Parsing (`langcore-rag` plugin)
@@ -168,6 +170,8 @@ How LangCore and its plugin ecosystem compare to [LangStruct](https://github.com
 | **MongoDB-style operators** | ✅ `$eq`, `$gte`, `$lte`, `$in`, etc. | ✅ | ❌ | ❌ |
 | **Parse confidence score** | ✅ 0.0 – 1.0 | ❌ | ❌ | ❌ |
 | **Explanation / rationale** | ✅ Human-readable | ❌ | ❌ | ❌ |
+| **Query caching (LRU)** | ✅ `cache_maxsize` parameter | ❌ | ❌ | ❌ |
+| **Jupyter-safe sync bridge** | ✅ `parse_sync_from_async()` | ❌ | ❌ | ❌ |
 | **Any LLM backend** | ✅ Via LiteLLM (100+ providers) | ✅ | ❌ | ❌ |
 
 ## Quick Start
@@ -509,9 +513,37 @@ import langcore as lx
 report = lx.evaluate(predictions=results, ground_truth=expected, schema=Invoice)
 ```
 
+**Averaging modes** — control how multi-document metrics are aggregated:
+
+```python
+from langcore.evaluation import ExtractionMetrics
+
+# Macro (default) — pool all extractions, compute P/R/F1 once
+metrics = ExtractionMetrics(schema=Invoice, averaging="macro")
+
+# Micro — compute P/R/F1 per document, then take unweighted mean
+metrics = ExtractionMetrics(schema=Invoice, averaging="micro")
+
+# Weighted — per-document P/R/F1 weighted by ground-truth count
+metrics = ExtractionMetrics(schema=Invoice, averaging="weighted")
+```
+
+**Fuzzy matching** — allow near-matches instead of exact string equality:
+
+```python
+# Match extractions with ≥80% string similarity (difflib.SequenceMatcher)
+metrics = ExtractionMetrics(fuzzy_threshold=0.8)
+report = metrics.evaluate(predictions=results, ground_truth=expected)
+
+# Also available via lx.evaluate()
+import langcore as lx
+report = lx.evaluate(predictions=results, ground_truth=expected, fuzzy_threshold=0.8)
+```
+
 The `EvaluationReport` includes:
 
 - Aggregate `precision`, `recall`, `f1`, `accuracy`
+- `averaging` — the strategy used (`"macro"`, `"micro"`, or `"weighted"`)
 - `per_document` — list of per-document metric dicts
 - `per_field` — dict of `FieldReport` objects with field-level P/R/F1 and support counts
 - `strict_attributes=True` mode for matching on attribute values (not just class + text)
