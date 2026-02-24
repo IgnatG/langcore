@@ -37,11 +37,18 @@ def _make_extraction(
     cls: str,
     text: str,
     attributes: dict | None = None,
+    *,
+    start: int | None = None,
+    end: int | None = None,
 ) -> data.Extraction:
+    interval = None
+    if start is not None and end is not None:
+        interval = data.CharInterval(start_pos=start, end_pos=end)
     return data.Extraction(
         extraction_class=cls,
         extraction_text=text,
         attributes=attributes,
+        char_interval=interval,
     )
 
 
@@ -447,6 +454,411 @@ class ResolveRetryCountTest(absltest.TestCase):
         """Explicit value is honoured even without schema."""
         result = extraction_mod._resolve_retry_count(2, None)
         self.assertEqual(result, 2)
+
+
+# ── _build_retry_regions tests ───────────────────────────────────
+
+
+class BuildRetryRegionsTest(absltest.TestCase):
+    """Tests for _build_retry_regions helper."""
+
+    def test_single_extraction_produces_centred_region(self):
+        ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=500, end=510
+        )
+        regions = pv._build_retry_regions(
+            [(ext, "err")], full_text="x" * 2000, max_char_buffer=600
+        )
+        self.assertLen(regions, 1)
+        start, end = regions[0]
+        # Region centred on midpoint 505, half=max(300, 200)=300
+        self.assertEqual(start, 205)
+        self.assertEqual(end, 805)
+
+    def test_overlapping_regions_are_merged(self):
+        ext_a = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=100, end=110
+        )
+        ext_b = _make_extraction(
+            "_Person", "Bob", attributes={"age": "bad"}, start=150, end=160
+        )
+        regions = pv._build_retry_regions(
+            [(ext_a, "err"), (ext_b, "err")],
+            full_text="x" * 1000,
+            max_char_buffer=200,
+        )
+        # Regions around 105 and 155 with half=100 overlap, should merge
+        self.assertLen(regions, 1)
+
+    def test_distant_regions_stay_separate(self):
+        ext_a = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        ext_b = _make_extraction(
+            "_Person", "Bob", attributes={"age": "bad"}, start=900, end=910
+        )
+        regions = pv._build_retry_regions(
+            [(ext_a, "err"), (ext_b, "err")],
+            full_text="x" * 1000,
+            max_char_buffer=200,
+        )
+        self.assertLen(regions, 2)
+
+    def test_no_char_interval_falls_back_to_full_text(self):
+        ext = _make_extraction("_Person", "Alice", attributes={"age": "bad"})
+        regions = pv._build_retry_regions(
+            [(ext, "err")], full_text="x" * 500, max_char_buffer=200
+        )
+        self.assertLen(regions, 1)
+        self.assertEqual(regions[0], (0, 500))
+
+    def test_region_clamped_to_text_boundaries(self):
+        ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        regions = pv._build_retry_regions(
+            [(ext, "err")], full_text="x" * 50, max_char_buffer=200
+        )
+        self.assertLen(regions, 1)
+        self.assertEqual(regions[0][0], 0)
+        self.assertLessEqual(regions[0][1], 50)
+
+    def test_empty_text_returns_no_regions(self):
+        ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=5
+        )
+        regions = pv._build_retry_regions(
+            [(ext, "err")], full_text="", max_char_buffer=200
+        )
+        self.assertEmpty(regions)
+
+
+# ── _merge_usage_pair tests ──────────────────────────────────────
+
+
+class MergeUsagePairTest(absltest.TestCase):
+    """Tests for _merge_usage_pair helper."""
+
+    def test_sums_both_dicts(self):
+        result = pv._merge_usage_pair(
+            {"prompt_tokens": 100, "completion_tokens": 50},
+            {"prompt_tokens": 200, "completion_tokens": 75},
+        )
+        self.assertEqual(result["prompt_tokens"], 300)
+        self.assertEqual(result["completion_tokens"], 125)
+
+    def test_none_plus_dict(self):
+        result = pv._merge_usage_pair(None, {"prompt_tokens": 100})
+        self.assertEqual(result, {"prompt_tokens": 100})
+
+    def test_dict_plus_none(self):
+        result = pv._merge_usage_pair({"prompt_tokens": 100}, None)
+        self.assertEqual(result, {"prompt_tokens": 100})
+
+    def test_both_none(self):
+        self.assertIsNone(pv._merge_usage_pair(None, None))
+
+
+# ── _offset_extractions tests ────────────────────────────────────
+
+
+class OffsetExtractionsTest(absltest.TestCase):
+    """Tests for _offset_extractions helper."""
+
+    def test_shifts_char_interval(self):
+        ext = _make_extraction("_Person", "Alice", start=10, end=20)
+        pv._offset_extractions([ext], 500)
+        self.assertEqual(ext.char_interval.start_pos, 510)
+        self.assertEqual(ext.char_interval.end_pos, 520)
+
+    def test_no_interval_is_safe(self):
+        ext = _make_extraction("_Person", "Alice")
+        # Should not raise
+        pv._offset_extractions([ext], 500)
+        self.assertIsNone(ext.char_interval)
+
+    def test_zero_offset(self):
+        ext = _make_extraction("_Person", "Alice", start=10, end=20)
+        pv._offset_extractions([ext], 0)
+        self.assertEqual(ext.char_interval.start_pos, 10)
+        self.assertEqual(ext.char_interval.end_pos, 20)
+
+
+# ── Chunk-level retry integration tests ──────────────────────────
+
+
+class ChunkLevelRetryTest(absltest.TestCase):
+    """Tests verifying that pydantic_retry uses chunk-level extraction."""
+
+    def _make_retry_kwargs(
+        self, annotator: mock.MagicMock, resolver: mock.MagicMock
+    ) -> dict:
+        return {
+            "annotator": annotator,
+            "res": resolver,
+            "max_char_buffer": 200,
+            "batch_length": 10,
+            "additional_context": None,
+            "debug": False,
+            "extraction_passes": 1,
+            "context_window_chars": None,
+            "show_progress": False,
+            "max_workers": 1,
+            "tokenizer": None,
+            "alignment_kwargs": {},
+            "hooks": hooks_lib.Hooks(),
+            "max_retries": 1,
+        }
+
+    def test_retry_sends_only_failing_region(self):
+        """Retry re-extracts only the region around the failing extraction."""
+        full_text = "A" * 100 + "Alice is 30" + "B" * 889  # 1000 chars total
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=100, end=111
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text=full_text)
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=11
+        )
+        retry_doc = data.AnnotatedDocument(
+            extractions=[corrected_ext], text="region text"
+        )
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        result = pv.pydantic_retry(
+            doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+        )
+
+        # The annotator was called with a text shorter than the full document
+        call_kwargs = annotator.annotate_text.call_args
+        region_text = call_kwargs[1]["text"]
+        self.assertLess(len(region_text), len(full_text))
+
+    def test_retry_preserves_document_id(self):
+        """Original document_id is preserved across retries."""
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text="x" * 100)
+        doc.document_id = "original-id-123"
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(
+            extractions=[corrected_ext], text="region text"
+        )
+        retry_doc.document_id = "retry-id-456"
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        result = pv.pydantic_retry(
+            doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+        )
+        self.assertEqual(result.document_id, "original-id-123")
+
+    def test_retry_accumulates_usage(self):
+        """Token usage from retries is accumulated, not discarded."""
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(
+            extractions=[bad_ext],
+            text="x" * 100,
+            usage={"prompt_tokens": 100, "completion_tokens": 50},
+        )
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(
+            extractions=[corrected_ext],
+            text="region text",
+            usage={"prompt_tokens": 30, "completion_tokens": 10},
+        )
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        result = pv.pydantic_retry(
+            doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+        )
+        self.assertEqual(result.usage["prompt_tokens"], 130)
+        self.assertEqual(result.usage["completion_tokens"], 60)
+
+    def test_retry_offsets_extractions_to_document_coords(self):
+        """Retry extractions are shifted back to full-document coordinates."""
+        full_text = "A" * 500 + "Alice is 30" + "B" * 489  # 1000 chars
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=500, end=511
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text=full_text)
+
+        # Retry returns extraction at region-relative coords
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=11
+        )
+        retry_doc = data.AnnotatedDocument(extractions=[corrected_ext], text="region")
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.return_value = retry_doc
+        resolver = mock.MagicMock()
+
+        result = pv.pydantic_retry(
+            doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+        )
+
+        # The corrected extraction should have been offset to document coords
+        found = [
+            e
+            for e in result.extractions
+            if e.extraction_text == "Alice" and e.attributes.get("age") == "30"
+        ]
+        self.assertLen(found, 1)
+        self.assertIsNotNone(found[0].char_interval)
+        # Offset should be > 0 (shifted from region-relative to absolute)
+        self.assertGreater(found[0].char_interval.start_pos, 0)
+
+    def test_multiple_failing_regions_each_retried(self):
+        """Multiple distant failing extractions each get their own retry call."""
+        full_text = "x" * 2000
+        ext_a = _make_extraction(
+            "_Person", "A", attributes={"age": "bad"}, start=0, end=10
+        )
+        ext_b = _make_extraction(
+            "_Person", "B", attributes={"age": "bad"}, start=1500, end=1510
+        )
+        doc = data.AnnotatedDocument(extractions=[ext_a, ext_b], text=full_text)
+
+        corrected_a = _make_extraction(
+            "_Person", "A", attributes={"age": "30"}, start=0, end=10
+        )
+        corrected_b = _make_extraction(
+            "_Person", "B", attributes={"age": "25"}, start=0, end=10
+        )
+        retry_doc_a = data.AnnotatedDocument(extractions=[corrected_a], text="region_a")
+        retry_doc_b = data.AnnotatedDocument(extractions=[corrected_b], text="region_b")
+
+        annotator = mock.MagicMock()
+        annotator.annotate_text.side_effect = [retry_doc_a, retry_doc_b]
+        resolver = mock.MagicMock()
+
+        result = pv.pydantic_retry(
+            doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+        )
+        # Two separate retry calls (one per region)
+        self.assertEqual(annotator.annotate_text.call_count, 2)
+        self.assertLen(result.extractions, 2)
+
+
+class AsyncChunkLevelRetryTest(absltest.TestCase):
+    """Tests verifying that async_pydantic_retry uses chunk-level extraction."""
+
+    def _make_retry_kwargs(
+        self, annotator: mock.MagicMock, resolver: mock.MagicMock
+    ) -> dict:
+        return {
+            "annotator": annotator,
+            "res": resolver,
+            "max_char_buffer": 200,
+            "batch_length": 10,
+            "additional_context": None,
+            "debug": False,
+            "extraction_passes": 1,
+            "context_window_chars": None,
+            "show_progress": False,
+            "max_workers": 1,
+            "tokenizer": None,
+            "alignment_kwargs": {},
+            "hooks": hooks_lib.Hooks(),
+            "max_retries": 1,
+        }
+
+    def test_async_retry_sends_only_failing_region(self):
+        full_text = "A" * 100 + "Alice is 30" + "B" * 889
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=100, end=111
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text=full_text)
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=11
+        )
+        retry_doc = data.AnnotatedDocument(extractions=[corrected_ext], text="region")
+
+        annotator = mock.MagicMock()
+        annotator.async_annotate_text = mock.AsyncMock(return_value=retry_doc)
+        resolver = mock.MagicMock()
+
+        result = asyncio.run(
+            pv.async_pydantic_retry(
+                doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+            )
+        )
+        call_kwargs = annotator.async_annotate_text.call_args
+        region_text = call_kwargs[1]["text"]
+        self.assertLess(len(region_text), len(full_text))
+
+    def test_async_retry_accumulates_usage(self):
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(
+            extractions=[bad_ext],
+            text="x" * 100,
+            usage={"prompt_tokens": 100},
+        )
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(
+            extractions=[corrected_ext],
+            text="region",
+            usage={"prompt_tokens": 20},
+        )
+
+        annotator = mock.MagicMock()
+        annotator.async_annotate_text = mock.AsyncMock(return_value=retry_doc)
+        resolver = mock.MagicMock()
+
+        result = asyncio.run(
+            pv.async_pydantic_retry(
+                doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+            )
+        )
+        self.assertEqual(result.usage["prompt_tokens"], 120)
+
+    def test_async_retry_preserves_document_id(self):
+        bad_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "bad"}, start=0, end=10
+        )
+        doc = data.AnnotatedDocument(extractions=[bad_ext], text="x" * 100)
+        doc.document_id = "original-id"
+
+        corrected_ext = _make_extraction(
+            "_Person", "Alice", attributes={"age": "30"}, start=0, end=10
+        )
+        retry_doc = data.AnnotatedDocument(extractions=[corrected_ext], text="region")
+        retry_doc.document_id = "retry-id"
+
+        annotator = mock.MagicMock()
+        annotator.async_annotate_text = mock.AsyncMock(return_value=retry_doc)
+        resolver = mock.MagicMock()
+
+        result = asyncio.run(
+            pv.async_pydantic_retry(
+                doc, _Person, **self._make_retry_kwargs(annotator, resolver)
+            )
+        )
+        self.assertEqual(result.document_id, "original-id")
 
 
 if __name__ == "__main__":

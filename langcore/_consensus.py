@@ -29,6 +29,7 @@ via the ``_consensus_model_id`` key in ``attributes``.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 from typing import Any
 
@@ -116,8 +117,14 @@ def consensus_extract(
     build_components_fn: Any,
     build_kwargs: dict[str, Any],
     annotate_kwargs: dict[str, Any],
+    max_workers: int | None = None,
 ) -> data.AnnotatedDocument:
-    """Run sync extraction with each model and merge results.
+    """Run sync extraction with each model **in parallel** and merge results.
+
+    Models are extracted concurrently using a
+    :class:`~concurrent.futures.ThreadPoolExecutor`.  Each model
+    builds its own annotator/resolver via ``build_components_fn``, so
+    there is no shared mutable state between threads.
 
     Parameters:
         text: The source text.
@@ -127,13 +134,14 @@ def consensus_extract(
             (without ``model_id``).
         annotate_kwargs: Keyword arguments for ``annotator.annotate_text``
             (without ``text`` and ``resolver``).
+        max_workers: Maximum number of threads.  Defaults to
+            ``min(len(model_ids), 4)``.
 
     Returns:
         A single ``AnnotatedDocument`` with consensus extractions.
     """
-    results: list[data.AnnotatedDocument] = []
 
-    for mid in model_ids:
+    def _run_one(mid: str) -> data.AnnotatedDocument:
         logger.info("Consensus extraction: running model %s", mid)
         _, annotator, res, alignment_kwargs = build_components_fn(
             model_id=mid, **build_kwargs
@@ -145,7 +153,22 @@ def consensus_extract(
             **alignment_kwargs,
         )
         _tag_extractions(result, mid)
-        results.append(result)
+        return result
+
+    effective_workers = max_workers or min(len(model_ids), 4)
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=effective_workers
+    ) as executor:
+        futures = {executor.submit(_run_one, mid): mid for mid in model_ids}
+        results: list[data.AnnotatedDocument] = []
+        for future in concurrent.futures.as_completed(futures):
+            mid = futures[future]
+            try:
+                results.append(future.result())
+            except Exception:
+                logger.exception("Consensus extraction failed for model %s", mid)
+                raise
 
     return merge_consensus_results(results, text=text)
 

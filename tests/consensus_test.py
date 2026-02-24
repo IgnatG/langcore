@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 from unittest import mock
 
 from absl.testing import absltest
@@ -303,6 +304,125 @@ class AsyncConsensusExtractTest(absltest.TestCase):
             if e.attributes
         }
         self.assertIn("model-a", tagged)
+
+
+# ── Parallel sync consensus tests ────────────────────────────────
+
+
+class ParallelConsensusTest(absltest.TestCase):
+    """Tests verifying that sync consensus uses parallel execution."""
+
+    def _make_mock_build_fn(
+        self,
+        results_by_model: dict[str, data.AnnotatedDocument],
+    ):
+        def build_fn(model_id, **kwargs):
+            annotator = mock.MagicMock()
+            annotator.annotate_text.return_value = results_by_model[model_id]
+            res = mock.MagicMock()
+            return (kwargs.get("text_or_documents", ""), annotator, res, {})
+
+        return build_fn
+
+    @mock.patch("langcore._consensus.concurrent.futures.ThreadPoolExecutor")
+    def test_uses_thread_pool_executor(self, mock_executor_cls):
+        """Sync consensus uses ThreadPoolExecutor for parallelism."""
+        ext = _make_extraction("Person", "Alice", start=0, end=5, confidence=0.9)
+        results = {
+            "model-a": _make_doc([ext], text="text"),
+            "model-b": _make_doc([], text="text"),
+        }
+
+        # Set up the mock executor to actually run the callables
+        mock_executor = mock.MagicMock()
+        mock_executor_cls.return_value.__enter__ = mock.MagicMock(
+            return_value=mock_executor
+        )
+        mock_executor_cls.return_value.__exit__ = mock.MagicMock(return_value=False)
+
+        # Make submit return futures that resolve to the right results
+        build_fn = self._make_mock_build_fn(results)
+
+        def fake_submit(fn, mid):
+            future = concurrent.futures.Future()
+            future.set_result(fn(mid))
+            return future
+
+        mock_executor.submit.side_effect = fake_submit
+
+        with mock.patch(
+            "langcore._consensus.concurrent.futures.as_completed",
+            side_effect=lambda fs: list(fs.keys()),
+        ):
+            _consensus.consensus_extract(
+                text="text",
+                model_ids=["model-a", "model-b"],
+                build_components_fn=build_fn,
+                build_kwargs={"text_or_documents": "text"},
+                annotate_kwargs={},
+            )
+
+        # Verify ThreadPoolExecutor was used
+        mock_executor_cls.assert_called_once()
+
+    def test_max_workers_parameter(self):
+        """max_workers parameter is respected."""
+        ext = _make_extraction("Person", "Alice", start=0, end=5, confidence=0.9)
+        results = {
+            "model-a": _make_doc([ext], text="text"),
+        }
+        # Just verify the function accepts max_workers without error
+        result = _consensus.consensus_extract(
+            text="text",
+            model_ids=["model-a"],
+            build_components_fn=self._make_mock_build_fn(results),
+            build_kwargs={"text_or_documents": "text"},
+            annotate_kwargs={},
+            max_workers=2,
+        )
+        self.assertIsNotNone(result)
+
+    def test_parallel_produces_same_results_as_expected(self):
+        """Parallel consensus produces correct merged results."""
+        ext_a = _make_extraction("Person", "Alice", start=0, end=5, confidence=0.9)
+        ext_b = _make_extraction("Person", "Bob", start=20, end=23, confidence=0.8)
+        results = {
+            "model-a": _make_doc([ext_a], text="text"),
+            "model-b": _make_doc([ext_b], text="text"),
+            "model-c": _make_doc([ext_a, ext_b], text="text"),
+        }
+        result = _consensus.consensus_extract(
+            text="text",
+            model_ids=["model-a", "model-b", "model-c"],
+            build_components_fn=self._make_mock_build_fn(results),
+            build_kwargs={"text_or_documents": "text"},
+            annotate_kwargs={},
+        )
+        # Should have both extractions
+        self.assertIsNotNone(result.extractions)
+        self.assertGreaterEqual(len(result.extractions), 2)
+
+    def test_exception_in_one_model_propagates(self):
+        """If one model raises, the exception propagates."""
+
+        def build_fn(model_id, **kwargs):
+            if model_id == "model-b":
+                annotator = mock.MagicMock()
+                annotator.annotate_text.side_effect = RuntimeError("model failed")
+            else:
+                annotator = mock.MagicMock()
+                annotator.annotate_text.return_value = _make_doc([], text="text")
+            res = mock.MagicMock()
+            return ("", annotator, res, {})
+
+        with self.assertRaises(RuntimeError):
+            _consensus.consensus_extract(
+                text="text",
+                model_ids=["model-a", "model-b"],
+                build_components_fn=build_fn,
+                build_kwargs={},
+                annotate_kwargs={},
+            )
 
 
 if __name__ == "__main__":

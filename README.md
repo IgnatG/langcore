@@ -294,8 +294,10 @@ result = lx.extract(text="...", schema=Invoice, schema_validation_retries=0)
 1. Valid extractions from the first pass are always preserved.
 2. Invalid extractions are collected with their Pydantic validation errors.
 3. A correction prompt containing the specific error messages is appended.
-4. The LLM re-extracts, and newly valid results are merged in.
-5. Steps 2–4 repeat up to `schema_validation_retries` times.
+4. **Chunk-level retry:** Only the text regions surrounding failing extractions are re-sent to the LLM (using `char_interval` to identify positions), not the entire document. Overlapping regions are merged automatically.
+5. Newly valid results are offset back to document coordinates and merged in.
+6. Steps 2–5 repeat up to `schema_validation_retries` times.
+7. Token usage from all retry regions is accumulated in the final `usage`.
 
 Retries also work for **Document list** inputs — each document is validated and retried independently.
 
@@ -344,7 +346,7 @@ You can freely mix providers in a single list — e.g. `["gemini-2.5-flash", "gp
 4. Each extraction is tagged with `_consensus_model_id` in its attributes.
 5. Token usage from all models is summed in the result.
 
-Consensus works with all other features — schema validation retries, reliability scoring, and hooks all apply to the merged result. The async version (`async_extract`) runs all models **concurrently** via `asyncio.gather` for maximum throughput.
+Consensus works with all other features — schema validation retries, reliability scoring, and hooks all apply to the merged result. Both the sync and async versions run all models **concurrently** — async via `asyncio.gather`, sync via `ThreadPoolExecutor` — for maximum throughput.
 
 When only one model is in the list, it falls back to standard single-model extraction.
 
