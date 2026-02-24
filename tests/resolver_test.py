@@ -6,6 +6,7 @@ from absl.testing import absltest, parameterized
 from langcore import chunking
 from langcore import resolver as resolver_lib
 from langcore.core import data, tokenizer
+from langcore.core import format_handler as fh
 
 
 def assert_char_interval_match_source(
@@ -22,9 +23,9 @@ def assert_char_interval_match_source(
     """
     for extraction in extractions:
         if extraction.alignment_status == data.AlignmentStatus.MATCH_EXACT:
-            assert extraction.char_interval is not None, (
-                "char_interval should not be None for AlignmentStatus.MATCH_EXACT"
-            )
+            assert (
+                extraction.char_interval is not None
+            ), "char_interval should not be None for AlignmentStatus.MATCH_EXACT"
 
             char_int = extraction.char_interval
             start = char_int.start_pos
@@ -45,9 +46,11 @@ class ParserTest(parameterized.TestCase):
         dict(
             testcase_name="json_invalid_input",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.JSON,
-                fence_output=True,
-                strict_fences=True,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.JSON,
+                    use_fences=True,
+                    strict_fences=True,
+                ),
             ),
             input_text="invalid input",
             expected_exception=resolver_lib.ResolverParsingError,
@@ -56,9 +59,11 @@ class ParserTest(parameterized.TestCase):
         dict(
             testcase_name="json_missing_markers",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.JSON,
-                fence_output=True,
-                strict_fences=True,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.JSON,
+                    use_fences=True,
+                    strict_fences=True,
+                ),
             ),
             input_text='[{"key": "value"}]',
             expected_exception=resolver_lib.ResolverParsingError,
@@ -67,19 +72,23 @@ class ParserTest(parameterized.TestCase):
         dict(
             testcase_name="json_empty_string",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.JSON,
-                fence_output=True,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.JSON,
+                    use_fences=True,
+                ),
             ),
             input_text="",
-            expected_exception=ValueError,
-            expected_regex=".*must be a non-empty string.*",
+            expected_exception=resolver_lib.ResolverParsingError,
+            expected_regex=".*Empty or invalid input.*",
         ),
         dict(
             testcase_name="json_partial_markers",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.JSON,
-                fence_output=True,
-                strict_fences=True,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.JSON,
+                    use_fences=True,
+                    strict_fences=True,
+                ),
             ),
             input_text='```json\n{"key": "value"',
             expected_exception=resolver_lib.ResolverParsingError,
@@ -88,9 +97,11 @@ class ParserTest(parameterized.TestCase):
         dict(
             testcase_name="yaml_invalid_input",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.YAML,
-                fence_output=True,
-                strict_fences=True,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.YAML,
+                    use_fences=True,
+                    strict_fences=True,
+                ),
             ),
             input_text="invalid input",
             expected_exception=resolver_lib.ResolverParsingError,
@@ -99,9 +110,11 @@ class ParserTest(parameterized.TestCase):
         dict(
             testcase_name="yaml_missing_markers",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.YAML,
-                fence_output=True,
-                strict_fences=True,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.YAML,
+                    use_fences=True,
+                    strict_fences=True,
+                ),
             ),
             input_text='[{"key": "value"}]',
             expected_exception=resolver_lib.ResolverParsingError,
@@ -110,8 +123,10 @@ class ParserTest(parameterized.TestCase):
         dict(
             testcase_name="yaml_empty_content",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.YAML,
-                fence_output=True,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.YAML,
+                    use_fences=True,
+                ),
             ),
             input_text="```yaml\n```",
             expected_exception=resolver_lib.ResolverParsingError,
@@ -354,8 +369,8 @@ class ExtractOrderedEntitiesTest(parameterized.TestCase):
         dict(
             testcase_name="no_index_suffix",
             resolver=resolver_lib.Resolver(
+                format_handler=fh.FormatHandler(format_type=data.FormatType.JSON),
                 extraction_index_suffix=None,
-                format_type=data.FormatType.JSON,
             ),
             test_input=[
                 {"medication": "Aspirin"},
@@ -393,8 +408,8 @@ class ExtractOrderedEntitiesTest(parameterized.TestCase):
         dict(
             testcase_name="attributes_suffix",
             resolver=resolver_lib.Resolver(
+                format_handler=fh.FormatHandler(format_type=data.FormatType.JSON),
                 extraction_index_suffix=None,
-                format_type=data.FormatType.JSON,
             ),
             test_input=[
                 {
@@ -524,7 +539,7 @@ class ExtractOrderedEntitiesTest(parameterized.TestCase):
         dict(
             testcase_name="non_integer_indices",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.JSON,
+                format_handler=fh.FormatHandler(format_type=data.FormatType.JSON),
                 extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
             ),
             test_input=[
@@ -541,7 +556,7 @@ class ExtractOrderedEntitiesTest(parameterized.TestCase):
         dict(
             testcase_name="float_indices",
             resolver=resolver_lib.Resolver(
-                format_type=data.FormatType.JSON,
+                format_handler=fh.FormatHandler(format_type=data.FormatType.JSON),
                 extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
             ),
             test_input=[{"medication": "Aspirin", "medication_index": 1.0}],
@@ -1687,7 +1702,8 @@ class AlignEntitiesTest(parameterized.TestCase):
 
 
 class ResolverTest(parameterized.TestCase):
-    _TWO_MEDICATIONS_JSON_UNDELIMITED = textwrap.dedent(f"""\
+    _TWO_MEDICATIONS_JSON_UNDELIMITED = textwrap.dedent(
+        f"""\
       {{
         "{data.EXTRACTIONS_KEY}": [
           {{
@@ -1705,9 +1721,11 @@ class ResolverTest(parameterized.TestCase):
             "duration_index": 10
           }}
         ]
-      }}""")
+      }}"""
+    )
 
-    _TWO_MEDICATIONS_YAML_UNDELIMITED = textwrap.dedent(f"""\
+    _TWO_MEDICATIONS_YAML_UNDELIMITED = textwrap.dedent(
+        f"""\
   {data.EXTRACTIONS_KEY}:
     - medication: "Naprosyn"
       medication_index: 4
@@ -1720,7 +1738,8 @@ class ResolverTest(parameterized.TestCase):
       medication_index: 9
       duration: "for one month"
       duration_index: 10
-  """)
+  """
+    )
 
     _EXPECTED_TWO_MEDICATIONS_ANNOTATED = [
         data.Extraction(
@@ -1758,7 +1777,7 @@ class ResolverTest(parameterized.TestCase):
     def setUp(self):
         super().setUp()
         self.default_resolver = resolver_lib.Resolver(
-            format_type=data.FormatType.JSON,
+            format_handler=fh.FormatHandler(format_type=data.FormatType.JSON),
             extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
         )
 
@@ -1766,11 +1785,14 @@ class ResolverTest(parameterized.TestCase):
         dict(
             testcase_name="json_with_fence",
             resolver=resolver_lib.Resolver(
-                fence_output=True,
-                format_type=data.FormatType.JSON,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.JSON,
+                    use_fences=True,
+                ),
                 extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
             ),
-            input_text=textwrap.dedent(f"""\
+            input_text=textwrap.dedent(
+                f"""\
             ```json
             {{
               "{data.EXTRACTIONS_KEY}": [
@@ -1790,17 +1812,21 @@ class ResolverTest(parameterized.TestCase):
                 }}
               ]
             }}
-            ```"""),
+            ```"""
+            ),
             expected_output=_EXPECTED_TWO_MEDICATIONS_ANNOTATED,
         ),
         dict(
             testcase_name="yaml_with_fence",
             resolver=resolver_lib.Resolver(
-                fence_output=True,
-                format_type=data.FormatType.YAML,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.YAML,
+                    use_fences=True,
+                ),
                 extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
             ),
-            input_text=textwrap.dedent(f"""\
+            input_text=textwrap.dedent(
+                f"""\
             ```yaml
             {data.EXTRACTIONS_KEY}:
               - medication: "Naprosyn"
@@ -1814,14 +1840,17 @@ class ResolverTest(parameterized.TestCase):
                 medication_index: 9
                 duration: "for one month"
                 duration_index: 10
-            ```"""),
+            ```"""
+            ),
             expected_output=_EXPECTED_TWO_MEDICATIONS_ANNOTATED,
         ),
         dict(
             testcase_name="json_no_fence",
             resolver=resolver_lib.Resolver(
-                fence_output=False,
-                format_type=data.FormatType.JSON,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.JSON,
+                    use_fences=False,
+                ),
                 extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
             ),
             input_text=_TWO_MEDICATIONS_JSON_UNDELIMITED,
@@ -1830,8 +1859,10 @@ class ResolverTest(parameterized.TestCase):
         dict(
             testcase_name="yaml_no_fence",
             resolver=resolver_lib.Resolver(
-                fence_output=False,
-                format_type=data.FormatType.YAML,
+                format_handler=fh.FormatHandler(
+                    format_type=data.FormatType.YAML,
+                    use_fences=False,
+                ),
                 extraction_index_suffix=resolver_lib.DEFAULT_INDEX_SUFFIX,
             ),
             input_text=_TWO_MEDICATIONS_YAML_UNDELIMITED,
@@ -1844,7 +1875,8 @@ class ResolverTest(parameterized.TestCase):
         assert_char_interval_match_source(self, input_text, actual_extractions)
 
     def test_handle_integer_extraction(self):
-        test_input = textwrap.dedent(f"""\
+        test_input = textwrap.dedent(
+            f"""\
     ```json
     {{
       "{data.EXTRACTIONS_KEY}": [
@@ -1854,7 +1886,8 @@ class ResolverTest(parameterized.TestCase):
         }}
       ]
     }}
-    ```""")
+    ```"""
+        )
         expected_extractions = [
             data.Extraction(
                 extraction_class="year",
@@ -2160,14 +2193,16 @@ class FenceFallbackTest(parameterized.TestCase):
     @parameterized.named_parameters(
         dict(
             testcase_name="with_valid_fences",
-            test_input=textwrap.dedent("""\
+            test_input=textwrap.dedent(
+                """\
               ```json
               {
                 "extractions": [
                   {"person": "Marie Curie", "person_attributes": {"field": "physics"}}
                 ]
               }
-              ```"""),
+              ```"""
+            ),
             fence_output=True,
             strict_fences=False,
             expected_key="person",
@@ -2175,12 +2210,14 @@ class FenceFallbackTest(parameterized.TestCase):
         ),
         dict(
             testcase_name="fallback_no_fences",
-            test_input=textwrap.dedent("""\
+            test_input=textwrap.dedent(
+                """\
               {
                 "extractions": [
                   {"person": "Albert Einstein", "person_attributes": {"field": "physics"}}
                 ]
-              }"""),
+              }"""
+            ),
             fence_output=True,
             strict_fences=False,
             expected_key="person",
@@ -2188,12 +2225,14 @@ class FenceFallbackTest(parameterized.TestCase):
         ),
         dict(
             testcase_name="no_fence_expectation",
-            test_input=textwrap.dedent("""\
+            test_input=textwrap.dedent(
+                """\
               {
                 "extractions": [
                   {"drug": "Aspirin", "drug_attributes": {"dosage": "100mg"}}
                 ]
-              }"""),
+              }"""
+            ),
             fence_output=False,
             strict_fences=False,
             expected_key="drug",
@@ -2209,17 +2248,20 @@ class FenceFallbackTest(parameterized.TestCase):
         expected_value,
     ):
         resolver = resolver_lib.Resolver(
-            fence_output=fence_output,
-            format_type=data.FormatType.JSON,
-            strict_fences=strict_fences,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=fence_output,
+                strict_fences=strict_fences,
+            ),
         )
         result = resolver.resolve(test_input)
         self.assertLen(result, 1)
-        self.assertIn(expected_key, result[0])
-        self.assertEqual(result[0][expected_key], expected_value)
+        self.assertEqual(result[0].extraction_class, expected_key)
+        self.assertEqual(result[0].extraction_text, expected_value)
 
     def test_fallback_preserves_content_integrity(self):
-        test_input = textwrap.dedent("""\
+        test_input = textwrap.dedent(
+            """\
         {
           "extractions": [
             {
@@ -2236,59 +2278,80 @@ class FenceFallbackTest(parameterized.TestCase):
               }
             }
           ]
-        }""")
+        }"""
+        )
         resolver = resolver_lib.Resolver(
-            fence_output=True,
-            format_type=data.FormatType.JSON,
-            strict_fences=False,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=True,
+                strict_fences=False,
+            ),
         )
         result = resolver.resolve(test_input)
         self.assertLen(result, 2, "Should preserve all extractions during fallback")
 
         self.assertEqual(
-            result[0]["medication"],
-            "Ibuprofen",
+            result[0].extraction_class,
+            "medication",
             "First extraction should have correct medication",
         )
         self.assertEqual(
-            result[0]["medication_attributes"]["dosage"],
+            result[0].extraction_text,
+            "Ibuprofen",
+            "First extraction should have correct medication value",
+        )
+        self.assertEqual(
+            result[0].attributes["dosage"],
             "200mg",
             "Should preserve nested attributes in fallback",
         )
 
         self.assertEqual(
-            result[1]["condition"],
-            "headache",
+            result[1].extraction_class,
+            "condition",
             "Second extraction should have correct condition",
         )
         self.assertEqual(
-            result[1]["condition_attributes"]["severity"],
+            result[1].extraction_text,
+            "headache",
+            "Second extraction should have correct condition value",
+        )
+        self.assertEqual(
+            result[1].attributes["severity"],
             "mild",
             "Should preserve all nested attributes",
         )
 
     def test_malformed_json_still_raises_error(self):
-        test_input = textwrap.dedent("""\
+        test_input = textwrap.dedent(
+            """\
         {
           "extractions": [
             {"person": "Missing closing brace"
-          ]""")
+          ]"""
+        )
         resolver = resolver_lib.Resolver(
-            fence_output=True,
-            format_type=data.FormatType.JSON,
-            strict_fences=False,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=True,
+                strict_fences=False,
+            ),
         )
         with self.assertRaises(resolver_lib.ResolverParsingError):
             resolver.resolve(test_input)
 
     def test_strict_fences_raises_on_missing_markers(self):
         strict_resolver = resolver_lib.Resolver(
-            fence_output=True,
-            format_type=data.FormatType.JSON,
-            strict_fences=True,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=True,
+                strict_fences=True,
+            ),
         )
-        test_input = textwrap.dedent("""\
-        {"extractions": [{"person": "Test"}]}""")
+        test_input = textwrap.dedent(
+            """\
+        {"extractions": [{"person": "Test"}]}"""
+        )
 
         with self.assertRaisesRegex(
             resolver_lib.ResolverParsingError, ".*fence markers.*"
@@ -2297,18 +2360,24 @@ class FenceFallbackTest(parameterized.TestCase):
 
     def test_default_allows_fallback(self):
         default_resolver = resolver_lib.Resolver(
-            fence_output=True,
-            format_type=data.FormatType.JSON,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=True,
+            ),
         )
-        test_input = textwrap.dedent("""\
-        {"extractions": [{"person": "Default Test"}]}""")
+        test_input = textwrap.dedent(
+            """\
+        {"extractions": [{"person": "Default Test"}]}"""
+        )
 
         result = default_resolver.resolve(test_input)
         self.assertLen(result, 1)
-        self.assertEqual(result[0]["person"], "Default Test")
+        self.assertEqual(result[0].extraction_class, "person")
+        self.assertEqual(result[0].extraction_text, "Default Test")
 
     def test_rejects_multiple_fenced_blocks(self):
-        test_input = textwrap.dedent("""\
+        test_input = textwrap.dedent(
+            """\
         preamble
         ```json
         {"extractions": [{"item": "first"}]}
@@ -2316,11 +2385,14 @@ class FenceFallbackTest(parameterized.TestCase):
         Some explanation text
         ```json
         {"extractions": [{"item": "second"}]}
-        ```""")
+        ```"""
+        )
         resolver = resolver_lib.Resolver(
-            fence_output=True,
-            format_type=data.FormatType.JSON,
-            strict_fences=False,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=True,
+                strict_fences=False,
+            ),
         )
         with self.assertRaisesRegex(
             resolver_lib.ResolverParsingError, "Multiple fenced blocks found"
@@ -2332,63 +2404,89 @@ class FlexibleSchemaTest(parameterized.TestCase):
     """Tests for flexible schema formats without extractions key."""
 
     def test_direct_list_format(self):
-        test_input = textwrap.dedent("""\
+        test_input = textwrap.dedent(
+            """\
         [
           {"person": "Marie Curie", "field": "physics"},
           {"person": "Albert Einstein", "field": "relativity"}
-        ]""")
+        ]"""
+        )
         resolver = resolver_lib.Resolver(
-            fence_output=False,
-            format_type=data.FormatType.JSON,
-            require_extractions_key=False,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=False,
+                use_wrapper=False,
+            ),
         )
         result = resolver.resolve(test_input)
-        self.assertLen(result, 2)
-        self.assertEqual(result[0]["person"], "Marie Curie")
-        self.assertEqual(result[1]["person"], "Albert Einstein")
+        # Each dict produces separate extractions per key-value pair
+        self.assertLen(result, 4)
+        self.assertEqual(result[0].extraction_class, "person")
+        self.assertEqual(result[0].extraction_text, "Marie Curie")
+        self.assertEqual(result[1].extraction_class, "field")
+        self.assertEqual(result[1].extraction_text, "physics")
+        self.assertEqual(result[2].extraction_class, "person")
+        self.assertEqual(result[2].extraction_text, "Albert Einstein")
+        self.assertEqual(result[3].extraction_class, "field")
+        self.assertEqual(result[3].extraction_text, "relativity")
 
     def test_single_dict_as_extraction(self):
         test_input = '{"person": "Isaac Newton", "field": "gravity"}'
         resolver = resolver_lib.Resolver(
-            fence_output=False,
-            format_type=data.FormatType.JSON,
-            require_extractions_key=False,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=False,
+                use_wrapper=False,
+            ),
         )
         result = resolver.resolve(test_input)
-        self.assertLen(result, 1)
-        self.assertEqual(result[0]["person"], "Isaac Newton")
-        self.assertEqual(result[0]["field"], "gravity")
+        self.assertLen(result, 2)
+        self.assertEqual(result[0].extraction_class, "person")
+        self.assertEqual(result[0].extraction_text, "Isaac Newton")
+        self.assertEqual(result[1].extraction_class, "field")
+        self.assertEqual(result[1].extraction_text, "gravity")
 
     def test_traditional_format_still_works(self):
-        test_input = textwrap.dedent("""\
+        test_input = textwrap.dedent(
+            """\
         {
           "extractions": [
             {"person": "Charles Darwin", "field": "evolution"}
           ]
-        }""")
+        }"""
+        )
         resolver = resolver_lib.Resolver(
-            fence_output=False,
-            format_type=data.FormatType.JSON,
-            require_extractions_key=False,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=False,
+                use_wrapper=False,
+            ),
         )
         result = resolver.resolve(test_input)
-        self.assertLen(result, 1)
-        self.assertEqual(result[0]["person"], "Charles Darwin")
+        self.assertLen(result, 2)
+        self.assertEqual(result[0].extraction_class, "person")
+        self.assertEqual(result[0].extraction_text, "Charles Darwin")
+        self.assertEqual(result[1].extraction_class, "field")
+        self.assertEqual(result[1].extraction_text, "evolution")
 
     def test_lenient_mode_accepts_list(self):
         # Some models return [...] instead of {"extractions": [...]}
         test_input = '[{"person": "Test"}]'
         resolver = resolver_lib.Resolver(
-            fence_output=False,
-            format_type=data.FormatType.JSON,
-            require_extractions_key=True,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=False,
+                use_wrapper=True,
+            ),
         )
         result = resolver.resolve(test_input)
         self.assertLen(result, 1)
-        self.assertEqual(result[0]["person"], "Test")
+        self.assertEqual(result[0].extraction_class, "person")
+        self.assertEqual(result[0].extraction_text, "Test")
 
     def test_flexible_with_attributes(self):
-        test_input = textwrap.dedent("""\
+        test_input = textwrap.dedent(
+            """\
         [
           {
             "medication": "Aspirin",
@@ -2398,17 +2496,23 @@ class FlexibleSchemaTest(parameterized.TestCase):
             "medication": "Ibuprofen",
             "medication_attributes": {"dosage": "200mg"}
           }
-        ]""")
+        ]"""
+        )
         resolver = resolver_lib.Resolver(
-            fence_output=False,
-            format_type=data.FormatType.JSON,
-            require_extractions_key=False,
+            format_handler=fh.FormatHandler(
+                format_type=data.FormatType.JSON,
+                use_fences=False,
+                use_wrapper=False,
+            ),
         )
         result = resolver.resolve(test_input)
         self.assertLen(result, 2)
-        self.assertEqual(result[0]["medication"], "Aspirin")
-        self.assertEqual(result[0]["medication_attributes"]["dosage"], "100mg")
-        self.assertEqual(result[1]["medication"], "Ibuprofen")
+        self.assertEqual(result[0].extraction_class, "medication")
+        self.assertEqual(result[0].extraction_text, "Aspirin")
+        self.assertEqual(result[0].attributes["dosage"], "100mg")
+        self.assertEqual(result[1].extraction_class, "medication")
+        self.assertEqual(result[1].extraction_text, "Ibuprofen")
+        self.assertEqual(result[1].attributes["dosage"], "200mg")
 
 
 if __name__ == "__main__":

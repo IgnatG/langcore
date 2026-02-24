@@ -121,8 +121,8 @@ class OllamaLanguageModel(base_model.BaseLanguageModel):
     _model: str
     _model_url: str
     format_type: core_types.FormatType = core_types.FormatType.JSON
-    _constraint: schema.Constraint = dataclasses.field(
-        default_factory=schema.Constraint, repr=False, compare=False
+    _constraint: core_types.Constraint = dataclasses.field(
+        default_factory=core_types.Constraint, repr=False, compare=False
     )
     _extra_kwargs: dict[str, Any] = dataclasses.field(
         default_factory=dict, repr=False, compare=False
@@ -157,7 +157,7 @@ class OllamaLanguageModel(base_model.BaseLanguageModel):
         model_id: str,
         model_url: str = _OLLAMA_DEFAULT_MODEL_URL,
         format_type: core_types.FormatType | None = None,
-        constraint: schema.Constraint = schema.Constraint(),
+        constraint: core_types.Constraint = core_types.Constraint(),
         timeout: int | None = None,
         **kwargs,
     ) -> None:

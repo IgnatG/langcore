@@ -2,4 +2,6 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from langcore.providers.schemas import gemini
+
+__all__: list[str] = ["gemini"]

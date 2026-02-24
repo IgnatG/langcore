@@ -9,7 +9,7 @@ import dataclasses
 from collections.abc import Iterator, Sequence
 from typing import Any
 
-from langcore.core import base_model, data, exceptions, schema
+from langcore.core import base_model, data, exceptions
 from langcore.core import types as core_types
 from langcore.providers import patterns, router
 
@@ -94,7 +94,9 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
         )
 
         super().__init__(
-            constraint=schema.Constraint(constraint_type=schema.ConstraintType.NONE)
+            constraint=core_types.Constraint(
+                constraint_type=core_types.ConstraintType.NONE
+            )
         )
         self._extra_kwargs = kwargs or {}
 
