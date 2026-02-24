@@ -26,9 +26,15 @@ from collections.abc import Callable, Iterator, Sequence
 from typing import Any, Protocol
 
 from absl import logging
-from google import genai
-from google.api_core import exceptions as google_exceptions
-from google.cloud import storage
+
+try:
+    from google import genai
+    from google.api_core import exceptions as google_exceptions
+    from google.cloud import storage
+except ImportError:
+    genai = None  # type: ignore[assignment]
+    google_exceptions = None  # type: ignore[assignment]
+    storage = None  # type: ignore[assignment]
 
 from langcore.core import exceptions
 
@@ -39,6 +45,15 @@ _EXT_JSONL = ".jsonl"
 _KEY_IDX = "idx-"
 _CACHE_PREFIX = "cache"
 _UNSET = object()
+
+
+def _check_google_deps() -> None:
+    """Raise a clear error if google-genai / google-cloud-storage are missing."""
+    if genai is None:
+        raise ImportError(
+            "google-genai and google-cloud-storage are required for Gemini batch "
+            "inference. Install them with:  pip install 'langcore[gemini]'"
+        )
 
 
 @dataclasses.dataclass(slots=True, frozen=True)
@@ -365,6 +380,7 @@ class GCSBatchCache:
     """GCS-based cache for batch inference results."""
 
     def __init__(self, bucket_name: str, project: str | None = None):
+        _check_google_deps()
         self.bucket_name = bucket_name
         self.project = project
         self._client = storage.Client(project=project)
@@ -710,6 +726,8 @@ def infer_batch(
           (when cfg.ignore_item_errors is False).
       TimeoutError: If batch job doesn't complete within cfg.timeout seconds.
     """
+    _check_google_deps()
+
     if not prompts:
         return []
 
