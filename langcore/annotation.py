@@ -504,6 +504,7 @@ class Annotator:
                     except (
                         resolver_lib.ResolverParsingError,
                         exceptions.FormatError,
+                        ValueError,
                     ) as exc:
                         raw_preview = (scored_outputs[0].output or "")[:200]
                         logging.warning(
@@ -923,6 +924,7 @@ class Annotator:
                 except (
                     resolver_lib.ResolverParsingError,
                     exceptions.FormatError,
+                    ValueError,
                 ) as exc:
                     raw_preview = (scored_outputs[0].output or "")[:200]
                     logging.warning(

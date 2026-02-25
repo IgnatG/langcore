@@ -390,13 +390,37 @@ class Resolver(AbstractResolver):
                     continue
 
                 if not isinstance(extraction_value, (str, int, float)):
-                    logging.error(
-                        "Extraction text must be a string, integer, or float. Found: %s",
-                        type(extraction_value),
-                    )
-                    raise ValueError(
-                        "Extraction text must be a string, integer, or float."
-                    )
+                    # Coerce recoverable types instead of crashing.
+                    if isinstance(extraction_value, (list, tuple)):
+                        # LLM sometimes returns a list for extraction_text.
+                        str_parts = [str(v) for v in extraction_value if v]
+                        if str_parts:
+                            coerced = " ".join(str_parts)
+                            logging.warning(
+                                "Coerced %s extraction_text to str "
+                                "(class=%s, len=%d): %.120s",
+                                type(extraction_value).__name__,
+                                extraction_class,
+                                len(extraction_value),
+                                coerced,
+                            )
+                            extraction_value = coerced
+                        else:
+                            logging.warning(
+                                "Skipping extraction with empty %s "
+                                "extraction_text (class=%s)",
+                                type(extraction_value).__name__,
+                                extraction_class,
+                            )
+                            continue
+                    else:
+                        logging.warning(
+                            "Skipping extraction with unsupported "
+                            "extraction_text type %s (class=%s)",
+                            type(extraction_value).__name__,
+                            extraction_class,
+                        )
+                        continue
 
                 if not isinstance(extraction_value, str):
                     extraction_value = str(extraction_value)
