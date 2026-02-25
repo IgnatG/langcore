@@ -395,9 +395,7 @@ class Resolver(AbstractResolver):
                         # Only coerce lists of simple values (strings, ints, etc.)
                         # Lists of dicts indicate a structural format issue
                         # (e.g. double-wrapped or nested extractions) — skip.
-                        if extraction_value and isinstance(
-                            extraction_value[0], dict
-                        ):
+                        if extraction_value and isinstance(extraction_value[0], dict):
                             logging.warning(
                                 "Skipping extraction with nested list-of-dicts "
                                 "extraction_text (class=%s, len=%d). "
