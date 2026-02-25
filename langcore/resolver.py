@@ -392,7 +392,23 @@ class Resolver(AbstractResolver):
                 if not isinstance(extraction_value, (str, int, float)):
                     # Coerce recoverable types instead of crashing.
                     if isinstance(extraction_value, (list, tuple)):
-                        # LLM sometimes returns a list for extraction_text.
+                        # Only coerce lists of simple values (strings, ints, etc.)
+                        # Lists of dicts indicate a structural format issue
+                        # (e.g. double-wrapped or nested extractions) — skip.
+                        if extraction_value and isinstance(
+                            extraction_value[0], dict
+                        ):
+                            logging.warning(
+                                "Skipping extraction with nested list-of-dicts "
+                                "extraction_text (class=%s, len=%d). "
+                                "This usually means the LLM double-wrapped "
+                                "its output.",
+                                extraction_class,
+                                len(extraction_value),
+                            )
+                            continue
+                        # LLM sometimes returns a list of strings for
+                        # extraction_text — join into a single string.
                         str_parts = [str(v) for v in extraction_value if v]
                         if str_parts:
                             coerced = " ".join(str_parts)
