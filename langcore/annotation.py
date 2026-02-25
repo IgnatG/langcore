@@ -490,13 +490,30 @@ class Annotator:
                     if not isinstance(scored_outputs, list):
                         scored_outputs = list(scored_outputs)
                     if not scored_outputs:
-                        raise exceptions.InferenceOutputError(
-                            "No scored outputs from language model."
+                        logging.warning(
+                            "No scored outputs for chunk %s (doc=%s), skipping.",
+                            text_chunk.chunk_text[:60],
+                            text_chunk.document_id,
                         )
+                        continue
 
-                    resolved_extractions = resolver.resolve(
-                        scored_outputs[0].output, debug=debug, **kwargs
-                    )
+                    try:
+                        resolved_extractions = resolver.resolve(
+                            scored_outputs[0].output, debug=debug, **kwargs
+                        )
+                    except (
+                        resolver_lib.ResolverParsingError,
+                        exceptions.FormatError,
+                    ) as exc:
+                        raw_preview = (scored_outputs[0].output or "")[:200]
+                        logging.warning(
+                            "Resolver failed for chunk (doc=%s): %s "
+                            "— skipping chunk. Raw output preview: %s",
+                            text_chunk.document_id,
+                            exc,
+                            raw_preview,
+                        )
+                        continue
 
                     token_offset = (
                         text_chunk.token_interval.start_index
@@ -892,13 +909,42 @@ class Annotator:
                 if not isinstance(scored_outputs, list):
                     scored_outputs = list(scored_outputs)
                 if not scored_outputs:
-                    raise exceptions.InferenceOutputError(
-                        "No scored outputs from language model."
+                    logging.warning(
+                        "No scored outputs for chunk %s (doc=%s), skipping.",
+                        text_chunk.chunk_text[:60],
+                        text_chunk.document_id,
                     )
+                    continue
 
-                resolved_extractions = resolver.resolve(
-                    scored_outputs[0].output, debug=debug, **kwargs
-                )
+                try:
+                    resolved_extractions = resolver.resolve(
+                        scored_outputs[0].output, debug=debug, **kwargs
+                    )
+                except (
+                    resolver_lib.ResolverParsingError,
+                    exceptions.FormatError,
+                ) as exc:
+                    raw_preview = (scored_outputs[0].output or "")[:200]
+                    logging.warning(
+                        "Resolver failed for chunk (doc=%s): %s "
+                        "— skipping chunk. Raw output preview: %s",
+                        text_chunk.document_id,
+                        exc,
+                        raw_preview,
+                    )
+                    # Still accumulate token usage even on parse failure.
+                    if scored_outputs[0].usage:
+                        usage = scored_outputs[0].usage
+                        doc_usage[text_chunk.document_id]["prompt_tokens"] += usage.get(
+                            "prompt_tokens", 0
+                        )
+                        doc_usage[text_chunk.document_id][
+                            "completion_tokens"
+                        ] += usage.get("completion_tokens", 0)
+                        doc_usage[text_chunk.document_id]["total_tokens"] += usage.get(
+                            "total_tokens", 0
+                        )
+                    continue
 
                 token_offset = (
                     text_chunk.token_interval.start_index

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Mapping, Sequence
 
 import yaml
 
 from langcore.core import data, exceptions
+
+logger = logging.getLogger(__name__)
 
 ExtractionValueType = str | int | float | dict | list | None
 
@@ -213,18 +216,41 @@ class FormatHandler:
                 "The extractions must be a sequence (list) of mappings."
             )
 
-        for item in items:
+        # Filter out non-dict items instead of failing the entire batch.
+        valid: list[dict] = []
+        skipped: list[tuple[int, str]] = []
+        for idx, item in enumerate(items):
             if not isinstance(item, dict):
-                raise exceptions.FormatParseError(
-                    "Each item in the sequence must be a mapping."
+                preview = repr(item)[:120]
+                skipped.append(
+                    (idx, f"expected dict, got {type(item).__name__}: {preview}")
                 )
-            for k in item:
-                if not isinstance(k, str):
-                    raise exceptions.FormatParseError(
-                        "All extraction keys must be strings (got a non-string key)."
-                    )
+                continue
+            # Validate all keys are strings.
+            bad_keys = [k for k in item if not isinstance(k, str)]
+            if bad_keys:
+                skipped.append((idx, f"non-string keys: {bad_keys!r}"))
+                continue
+            valid.append(item)
 
-        return items
+        if skipped:
+            details = "; ".join(f"[{idx}] {reason}" for idx, reason in skipped)
+            logger.warning(
+                "Skipped %d/%d invalid items in extraction output: %s",
+                len(skipped),
+                len(items),
+                details,
+            )
+
+        if not valid and items:
+            # Every item was garbage — include a sample in the error.
+            sample = repr(items[0])[:200]
+            raise exceptions.FormatParseError(
+                f"All {len(items)} items are invalid "
+                f"(expected dicts). First item: {sample}"
+            )
+
+        return valid
 
     def _add_fences(self, content: str) -> str:
         """Add code fences around content."""
