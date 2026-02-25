@@ -6,7 +6,7 @@ with lazy loading for other submodules accessed via attribute access.
 
 from __future__ import annotations
 
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
 import importlib
 import sys

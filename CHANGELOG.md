@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.6 (2026-02-25)
+
+### Bug Fixes
+
+- Enhance error handling for extraction values in Resolver
+  ([`7ad69af`](https://github.com/IgnatG/langcore/commit/7ad69afa2bf51a5004554fab3658fb3bbb65a2fa))
+
+
 ## v1.1.5 (2026-02-25)
 
 ### Bug Fixes
