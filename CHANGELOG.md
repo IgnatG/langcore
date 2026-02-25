@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.5 (2026-02-25)
+
+### Bug Fixes
+
+- Improve error handling and logging in Annotator and FormatHandler
+  ([`e49e478`](https://github.com/IgnatG/langcore/commit/e49e4783f0fec1c1116f6907e7d64c9ff7d443c0))
+
+
 ## v1.1.4 (2026-02-25)
 
 ### Bug Fixes
