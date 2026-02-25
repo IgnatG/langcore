@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.1.7 (2026-02-25)
+
+### Bug Fixes
+
+- Enhance extraction value handling to skip nested lists of dicts
+  ([`3c89871`](https://github.com/IgnatG/langcore/commit/3c8987139cadff0701bee6a956e3a07975b34753))
+
+- Streamline extraction value handling to skip nested lists of dicts
+  ([`3dbb439`](https://github.com/IgnatG/langcore/commit/3dbb43939d248ea9c0d0f85b0755282174a8d27c))
+
+
 ## v1.1.6 (2026-02-25)
 
 ### Bug Fixes
