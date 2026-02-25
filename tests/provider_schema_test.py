@@ -6,12 +6,12 @@ from unittest import mock
 
 from absl.testing import absltest
 
-HAS_GOOGLE = importlib.util.find_spec("google") is not None
-
 import langcore as lx
 from langcore import exceptions, factory, schema
 from langcore.core import data
 from langcore.providers import gemini, ollama, openai, schemas
+
+HAS_GOOGLE = importlib.util.find_spec("google") is not None
 
 
 class ProviderSchemaDiscoveryTest(absltest.TestCase):

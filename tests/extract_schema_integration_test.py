@@ -1,5 +1,7 @@
 """Integration tests for extract function with new schema system."""
 
+import importlib
+import unittest
 import warnings
 from unittest import mock
 
@@ -7,6 +9,8 @@ from absl.testing import absltest
 
 import langcore as lx
 from langcore.core import data
+
+HAS_GOOGLE = importlib.util.find_spec("google") is not None
 
 
 class ExtractSchemaIntegrationTest(absltest.TestCase):
@@ -175,6 +179,7 @@ class ExtractSchemaIntegrationTest(absltest.TestCase):
             ]
             self.assertGreater(len(deprecation_warnings), 0)
 
+    @unittest.skipUnless(HAS_GOOGLE, "google-genai package not installed")
     def test_extract_no_schema_when_disabled(self):
         """Test that no schema is used when use_schema_constraints=False."""
         # Create a mock instance with required attributes

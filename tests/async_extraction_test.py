@@ -18,7 +18,8 @@ import pytest
 
 from langcore import annotation, extraction, prompting
 from langcore import resolver as resolver_lib
-from langcore.core import base_model, data, format_handler as fh, types
+from langcore.core import base_model, data, types
+from langcore.core import format_handler as fh
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 

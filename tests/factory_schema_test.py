@@ -4,7 +4,7 @@ from unittest import mock
 
 from absl.testing import absltest
 
-from langcore import factory, schema
+from langcore import factory
 from langcore.core import base_model, data
 from langcore.providers import schemas
 
