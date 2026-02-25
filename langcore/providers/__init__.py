@@ -19,6 +19,7 @@ __all__ = [
     "load_plugins_once",
     "ollama",
     "openai",
+    "registry",
     "router",
     "schemas",
 ]
@@ -119,7 +120,9 @@ def _reset_for_testing() -> None:
 
 def __getattr__(name: str):
     """Lazy loading for submodules."""
-    if name == "router":
+    if name in ("router", "registry"):
+        # ``registry`` is a public alias kept for backward-compatibility
+        # with plugins that use ``lx.providers.registry.register(...)``.
         return importlib.import_module("langcore.providers.router")
     elif name == "schemas":
         return importlib.import_module("langcore.providers.schemas")

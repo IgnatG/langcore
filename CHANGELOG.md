@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## v1.1.4 (2026-02-25)
+
+### Bug Fixes
+
+- Add `registry` as a public alias for `providers.router` so that plugins using
+  `lx.providers.registry.register(...)` resolve correctly
+
 ## v1.1.3 (2026-02-24)
 
 ### Bug Fixes
@@ -9,14 +16,12 @@
 - Update resolver initialization to use format_handler and improve caching in various components
   ([`fa9cac2`](https://github.com/IgnatG/langcore/commit/fa9cac242e607b36a9626c40433133ab1d02541d))
 
-
 ## v1.1.2 (2026-02-24)
 
 ### Bug Fixes
 
 - Simplify class definition and improve terminal state handling in gemini provider
   ([`c7f3253`](https://github.com/IgnatG/langcore/commit/c7f32534567dfa27adee75757a0ccb83af923d30))
-
 
 ## v1.1.1 (2026-02-24)
 
@@ -30,7 +35,6 @@
 - Fix failing tests
   ([`267b101`](https://github.com/IgnatG/langcore/commit/267b101df8d9c44f726e51ae71d89cdf7b641a76))
 
-
 ## v1.0.2 (2026-02-23)
 
 ### Bug Fixes
@@ -38,14 +42,12 @@
 - Update repository links and improve documentation for provider plugin creation
   ([`4ca737c`](https://github.com/IgnatG/langcore/commit/4ca737c9bb3c4ef0225cb4b502427b111525bf75))
 
-
 ## v1.0.1 (2026-02-23)
 
 ### Bug Fixes
 
 - Fixed failing tests
   ([`e007322`](https://github.com/IgnatG/langcore/commit/e00732266dfbc7b9f9856c0a85bd447ebb5bd4c5))
-
 
 ## v1.0.0 (2026-02-23)
 
@@ -58,7 +60,6 @@
 - Implement extraction hooks and event system, add configurable confidence weights, and centralize
   schema utilities
   ([`76038c6`](https://github.com/IgnatG/langcore/commit/76038c67fe94004dd2c054e2b4b01b8dbbd82fcd))
-
 
 ## v1.2.0 (2026-02-23)
 
